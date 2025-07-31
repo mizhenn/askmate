@@ -68,7 +68,7 @@ export const UploadSection = () => {
   };
 
   return (
-    <section className="py-20 px-6 lg:px-8 bg-background">
+    <section id="upload-section" className="py-20 px-6 lg:px-8 bg-background">
       <div className="max-w-4xl mx-auto">
         <div className="text-center mb-12">
           <h2 className="text-3xl font-bold text-foreground mb-4">
@@ -193,7 +193,14 @@ export const UploadSection = () => {
           {/* Start Analysis Button */}
           {(uploadedFiles.length > 0 || websiteUrl) && (
             <div className="text-center">
-              <Button variant="hero" size="lg" className="group">
+              <Button 
+                variant="hero" 
+                size="lg" 
+                className="group"
+                onClick={() => {
+                  toast.success("Analysis started! Chat interface coming soon...");
+                }}
+              >
                 Start asking questions
                 <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
               </Button>

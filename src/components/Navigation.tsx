@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { FileQuestion, Menu, X } from "lucide-react";
+import { toast } from "sonner";
 import { useState } from "react";
 
 export const Navigation = () => {
@@ -28,10 +29,23 @@ export const Navigation = () => {
             <a href="#how-it-works" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
               How it works
             </a>
-            <Button variant="outline" size="sm">
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => {
+                toast.success("Sign in coming soon!");
+              }}
+            >
               Sign in
             </Button>
-            <Button variant="default" size="sm">
+            <Button 
+              variant="default" 
+              size="sm"
+              onClick={() => {
+                const uploadSection = document.querySelector('#upload-section');
+                uploadSection?.scrollIntoView({ behavior: 'smooth' });
+              }}
+            >
               Get started
             </Button>
           </div>
@@ -61,10 +75,25 @@ export const Navigation = () => {
                 How it works
               </a>
               <div className="flex flex-col gap-2 pt-2">
-                <Button variant="outline" size="sm">
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => {
+                    toast.success("Sign in coming soon!");
+                    setIsMenuOpen(false);
+                  }}
+                >
                   Sign in
                 </Button>
-                <Button variant="default" size="sm">
+                <Button 
+                  variant="default" 
+                  size="sm"
+                  onClick={() => {
+                    const uploadSection = document.querySelector('#upload-section');
+                    uploadSection?.scrollIntoView({ behavior: 'smooth' });
+                    setIsMenuOpen(false);
+                  }}
+                >
                   Get started
                 </Button>
               </div>

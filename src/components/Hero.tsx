@@ -43,6 +43,10 @@ export const Hero = () => {
                 variant="hero" 
                 size="lg" 
                 className="group"
+                onClick={() => {
+                  const uploadSection = document.querySelector('#upload-section');
+                  uploadSection?.scrollIntoView({ behavior: 'smooth' });
+                }}
               >
                 Start analyzing documents
                 <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
@@ -51,6 +55,10 @@ export const Hero = () => {
                 variant="outline" 
                 size="lg"
                 className="border-2"
+                onClick={() => {
+                  const featuresSection = document.querySelector('#features');
+                  featuresSection?.scrollIntoView({ behavior: 'smooth' });
+                }}
               >
                 Learn more
               </Button>
