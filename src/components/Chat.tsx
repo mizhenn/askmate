@@ -3,8 +3,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Send, Bot, User, FileText, Link, Sparkles } from "lucide-react";
+import { Send, Bot, User, FileText, Link, Sparkles, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
+import { DocumentProcessor } from "@/utils/DocumentProcessor";
+import { WebscrapeService } from "@/utils/WebscrapeService";
+import { AIService } from "@/utils/AIService";
+import { ApiKeyManager } from "./ApiKeyManager";
 
 interface Message {
   id: string;
@@ -18,10 +22,17 @@ interface ChatProps {
   websiteUrl?: string;
 }
 
+interface ProcessedContent {
+  documents: Array<{ name: string; content: string; summary: string }>;
+  website?: { url: string; content: string; title?: string };
+}
+
 export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [processedContent, setProcessedContent] = useState<ProcessedContent>({ documents: [] });
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -32,19 +43,98 @@ export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
     scrollToBottom();
   }, [messages]);
 
-  // Welcome message when chat starts
+  // Process documents and website content when component mounts
   useEffect(() => {
-    const welcomeMessage: Message = {
-      id: "welcome",
-      content: `Hi! I've analyzed your ${uploadedFiles.length > 0 ? `${uploadedFiles.length} document(s)` : ''} ${uploadedFiles.length > 0 && websiteUrl ? 'and ' : ''} ${websiteUrl ? 'website' : ''}. Ask me anything about the content, and I'll give you clear, accurate answers based on what you've shared.`,
-      sender: 'assistant',
-      timestamp: new Date()
-    };
-    setMessages([welcomeMessage]);
+    processContent();
   }, [uploadedFiles, websiteUrl]);
+
+  const processContent = async () => {
+    setIsProcessing(true);
+    const processed: ProcessedContent = { documents: [] };
+
+    try {
+      // Process uploaded documents
+      for (const file of uploadedFiles) {
+        try {
+          const content = await DocumentProcessor.extractTextFromFile(file);
+          const summary = DocumentProcessor.summarizeText(content);
+          processed.documents.push({
+            name: file.name,
+            content,
+            summary
+          });
+        } catch (error) {
+          console.error(`Error processing ${file.name}:`, error);
+          toast.error(`Failed to process ${file.name}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+      }
+
+      // Process website content
+      if (websiteUrl) {
+        try {
+          const result = await WebscrapeService.scrapeWebsite(websiteUrl);
+          if (result.success && result.data) {
+            processed.website = {
+              url: websiteUrl,
+              content: result.data.content,
+              title: result.data.title
+            };
+          } else {
+            toast.error(`Failed to scrape website: ${result.error}`);
+          }
+        } catch (error) {
+          console.error('Error scraping website:', error);
+          toast.error('Failed to scrape website content');
+        }
+      }
+
+      setProcessedContent(processed);
+
+      // Generate welcome message based on processed content
+      const welcomeContent = generateWelcomeMessage(processed);
+      const welcomeMessage: Message = {
+        id: "welcome",
+        content: welcomeContent,
+        sender: 'assistant',
+        timestamp: new Date()
+      };
+      setMessages([welcomeMessage]);
+
+    } catch (error) {
+      console.error('Error processing content:', error);
+      toast.error('Failed to process content');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const generateWelcomeMessage = (content: ProcessedContent): string => {
+    let message = "Hi! I've analyzed your content:\n\n";
+    
+    if (content.documents.length > 0) {
+      message += `📄 **Documents (${content.documents.length}):**\n`;
+      content.documents.forEach(doc => {
+        message += `• ${doc.name}\n`;
+      });
+      message += "\n";
+    }
+
+    if (content.website) {
+      message += `🌐 **Website:** ${content.website.title || content.website.url}\n\n`;
+    }
+
+    message += "Ask me anything about the content, and I'll provide accurate answers based on what I've analyzed!";
+    return message;
+  };
 
   const handleSendMessage = async () => {
     if (!inputValue.trim()) return;
+
+    // Check if AI service is configured
+    if (!AIService.hasApiKey()) {
+      toast.error("Please configure your OpenAI API key first to use AI features.");
+      return;
+    }
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -57,30 +147,57 @@ export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
     setInputValue("");
     setIsLoading(true);
 
-    // Simulate AI response (replace with actual AI integration)
-    setTimeout(() => {
-      const aiResponse: Message = {
+    try {
+      // Combine all processed content for context
+      let context = "";
+      
+      if (processedContent.documents.length > 0) {
+        context += "Documents:\n";
+        processedContent.documents.forEach(doc => {
+          context += `\n--- ${doc.name} ---\n${doc.content}\n`;
+        });
+      }
+
+      if (processedContent.website) {
+        context += `\n\nWebsite (${processedContent.website.url}):\n${processedContent.website.content}`;
+      }
+
+      if (!context.trim()) {
+        throw new Error("No content available to answer questions about.");
+      }
+
+      const result = await AIService.answerQuestion(
+        userMessage.content, 
+        context,
+        processedContent.website ? 'website' : 'document'
+      );
+
+      if (result.success && result.answer) {
+        const aiResponse: Message = {
+          id: (Date.now() + 1).toString(),
+          content: result.answer,
+          sender: 'assistant',
+          timestamp: new Date()
+        };
+        setMessages(prev => [...prev, aiResponse]);
+      } else {
+        throw new Error(result.error || 'Failed to get AI response');
+      }
+    } catch (error) {
+      console.error('Error getting AI response:', error);
+      const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
-        content: generateAIResponse(userMessage.content),
+        content: `Sorry, I encountered an error: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`,
         sender: 'assistant',
         timestamp: new Date()
       };
-      setMessages(prev => [...prev, aiResponse]);
+      setMessages(prev => [...prev, errorMessage]);
+      toast.error('Failed to get AI response');
+    } finally {
       setIsLoading(false);
-    }, 1500);
+    }
   };
 
-  const generateAIResponse = (question: string): string => {
-    // This is a mock response - replace with actual AI integration
-    const responses = [
-      "Based on the document you uploaded, here's what I found...",
-      "Great question! According to the content you shared, the answer is...",
-      "I can see this information in your document. Let me explain...",
-      "From the website you provided, I found relevant information about this topic...",
-      "That's an interesting point. The document mentions..."
-    ];
-    return responses[Math.floor(Math.random() * responses.length)] + " This is a demo response. In the full version, I would analyze your actual documents and provide specific answers based on their content.";
-  };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -98,6 +215,39 @@ export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
 
   return (
     <div className="max-w-4xl mx-auto">
+      {/* API Key Manager */}
+      {(!AIService.hasApiKey() || !WebscrapeService.hasApiKey()) && (
+        <Card className="p-4 mb-6 bg-amber-50 border-amber-200">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5" />
+            <div className="flex-1">
+              <h4 className="font-medium text-amber-800">API Keys Required</h4>
+              <p className="text-sm text-amber-700 mt-1">
+                Configure your API keys to enable document analysis and website scraping.
+              </p>
+              <div className="mt-3">
+                <ApiKeyManager />
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* Processing Status */}
+      {isProcessing && (
+        <Card className="p-6 mb-6 bg-primary/5 border-primary/20">
+          <div className="flex items-center gap-3">
+            <div className="animate-spin w-5 h-5 border-2 border-primary border-t-transparent rounded-full" />
+            <div>
+              <p className="font-medium text-foreground">Processing your content...</p>
+              <p className="text-sm text-muted-foreground">
+                Extracting text from documents and analyzing website content
+              </p>
+            </div>
+          </div>
+        </Card>
+      )}
+
       {/* Chat Header */}
       <Card className="p-6 mb-6 bg-gradient-subtle border-primary/20">
         <div className="flex items-center gap-4">
@@ -113,13 +263,14 @@ export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
             </p>
           </div>
           <div className="flex gap-2">
-            {uploadedFiles.length > 0 && (
+            <ApiKeyManager />
+            {processedContent.documents.length > 0 && (
               <div className="flex items-center gap-1 px-3 py-1 bg-primary/10 rounded-full">
                 <FileText className="w-3 h-3 text-primary" />
-                <span className="text-xs text-primary font-medium">{uploadedFiles.length} docs</span>
+                <span className="text-xs text-primary font-medium">{processedContent.documents.length} docs</span>
               </div>
             )}
-            {websiteUrl && (
+            {processedContent.website && (
               <div className="flex items-center gap-1 px-3 py-1 bg-primary/10 rounded-full">
                 <Link className="w-3 h-3 text-primary" />
                 <span className="text-xs text-primary font-medium">Website</span>
