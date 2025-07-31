@@ -4,11 +4,13 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Upload, FileText, Link, X, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
+import { Chat } from "./Chat";
 
 export const UploadSection = () => {
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [websiteUrl, setWebsiteUrl] = useState("");
   const [isDragging, setIsDragging] = useState(false);
+  const [showChat, setShowChat] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -61,7 +63,7 @@ export const UploadSection = () => {
     try {
       new URL(websiteUrl);
       toast.success("Website added for analysis!");
-      setWebsiteUrl("");
+      // Don't clear the URL here so it can be used in chat
     } catch {
       toast.error("Please enter a valid website URL");
     }
@@ -191,19 +193,30 @@ export const UploadSection = () => {
           </Card>
 
           {/* Start Analysis Button */}
-          {(uploadedFiles.length > 0 || websiteUrl) && (
+          {(uploadedFiles.length > 0 || websiteUrl) && !showChat && (
             <div className="text-center">
               <Button 
                 variant="hero" 
                 size="lg" 
                 className="group"
                 onClick={() => {
-                  toast.success("Analysis started! Chat interface coming soon...");
+                  setShowChat(true);
+                  toast.success("Starting chat interface...");
                 }}
               >
                 Start asking questions
                 <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
               </Button>
+            </div>
+          )}
+
+          {/* Chat Interface */}
+          {showChat && (
+            <div className="mt-12">
+              <Chat 
+                uploadedFiles={uploadedFiles} 
+                websiteUrl={websiteUrl || undefined} 
+              />
             </div>
           )}
         </div>
