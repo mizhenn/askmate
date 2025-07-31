@@ -26,7 +26,8 @@ export default {
 				foreground: 'hsl(var(--foreground))',
 				primary: {
 					DEFAULT: 'hsl(var(--primary))',
-					foreground: 'hsl(var(--primary-foreground))'
+					foreground: 'hsl(var(--primary-foreground))',
+					glow: 'hsl(var(--primary-glow))'
 				},
 				secondary: {
 					DEFAULT: 'hsl(var(--secondary))',
@@ -67,6 +68,21 @@ export default {
 				lg: 'var(--radius)',
 				md: 'calc(var(--radius) - 2px)',
 				sm: 'calc(var(--radius) - 4px)'
+			},
+			backgroundImage: {
+				'gradient-primary': 'var(--gradient-primary)',
+				'gradient-subtle': 'var(--gradient-subtle)',
+				'gradient-hero': 'var(--gradient-hero)'
+			},
+			boxShadow: {
+				soft: 'var(--shadow-soft)',
+				medium: 'var(--shadow-medium)',
+				large: 'var(--shadow-large)',
+				glow: 'var(--shadow-glow)'
+			},
+			transitionTimingFunction: {
+				smooth: 'var(--transition-smooth)',
+				bounce: 'var(--transition-bounce)'
 			},
 			keyframes: {
 				'accordion-down': {
