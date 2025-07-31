@@ -16,26 +16,10 @@ export const ApiKeyManager = () => {
   const [isTestingOpenai, setIsTestingOpenai] = useState(false);
   const [isTestingFirecrawl, setIsTestingFirecrawl] = useState(false);
 
-  const hasOpenaiKey = AIService.hasApiKey();
   const hasFirecrawlKey = WebscrapeService.hasApiKey();
 
   const handleSaveOpenaiKey = async () => {
-    if (!openaiKey.trim()) {
-      toast.error("Please enter your OpenAI API key");
-      return;
-    }
-
-    setIsTestingOpenai(true);
-    const isValid = await AIService.testApiKey(openaiKey);
-    
-    if (isValid) {
-      AIService.saveApiKey(openaiKey);
-      toast.success("OpenAI API key saved successfully!");
-      setOpenaiKey("");
-    } else {
-      toast.error("Invalid OpenAI API key. Please check and try again.");
-    }
-    setIsTestingOpenai(false);
+    toast.info("OpenAI API key is now managed through Supabase secrets. Your app is already configured!");
   };
 
   const handleSaveFirecrawlKey = async () => {
@@ -63,7 +47,7 @@ export const ApiKeyManager = () => {
         <Button variant="outline" size="sm" className="gap-2">
           <Key className="w-4 h-4" />
           API Keys
-          {(hasOpenaiKey || hasFirecrawlKey) && (
+          {hasFirecrawlKey && (
             <div className="w-2 h-2 bg-green-500 rounded-full" />
           )}
         </Button>
@@ -78,47 +62,14 @@ export const ApiKeyManager = () => {
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <h4 className="font-semibold text-foreground">OpenAI API Key</h4>
-                {hasOpenaiKey ? (
-                  <div className="flex items-center gap-1 text-green-600">
-                    <Check className="w-4 h-4" />
-                    <span className="text-xs">Configured</span>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-1 text-muted-foreground">
-                    <X className="w-4 h-4" />
-                    <span className="text-xs">Not set</span>
-                  </div>
-                )}
+                <div className="flex items-center gap-1 text-green-600">
+                  <Check className="w-4 h-4" />
+                  <span className="text-xs">Configured via Supabase</span>
+                </div>
               </div>
               <p className="text-xs text-muted-foreground">
-                Required for AI-powered document analysis and Q&A
+                ✅ OpenAI integration is configured through Supabase Edge Functions for secure API calls
               </p>
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <Input
-                    type={showOpenaiKey ? "text" : "password"}
-                    placeholder="sk-..."
-                    value={openaiKey}
-                    onChange={(e) => setOpenaiKey(e.target.value)}
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="absolute right-1 top-1 h-6 w-6 p-0"
-                    onClick={() => setShowOpenaiKey(!showOpenaiKey)}
-                  >
-                    {showOpenaiKey ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-                  </Button>
-                </div>
-                <Button 
-                  onClick={handleSaveOpenaiKey}
-                  disabled={isTestingOpenai || !openaiKey.trim()}
-                  size="sm"
-                >
-                  {isTestingOpenai ? "Testing..." : "Save"}
-                </Button>
-              </div>
             </div>
           </Card>
 

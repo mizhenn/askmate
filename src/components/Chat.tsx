@@ -130,11 +130,6 @@ export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
   const handleSendMessage = async () => {
     if (!inputValue.trim()) return;
 
-    // Check if AI service is configured
-    if (!AIService.hasApiKey()) {
-      toast.error("Please configure your OpenAI API key first to use AI features.");
-      return;
-    }
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -216,14 +211,14 @@ export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
   return (
     <div className="max-w-4xl mx-auto">
       {/* API Key Manager */}
-      {(!AIService.hasApiKey() || !WebscrapeService.hasApiKey()) && (
+      {!WebscrapeService.hasApiKey() && websiteUrl && (
         <Card className="p-4 mb-6 bg-amber-50 border-amber-200">
           <div className="flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5" />
             <div className="flex-1">
-              <h4 className="font-medium text-amber-800">API Keys Required</h4>
+              <h4 className="font-medium text-amber-800">Firecrawl API Key Required</h4>
               <p className="text-sm text-amber-700 mt-1">
-                Configure your API keys to enable document analysis and website scraping.
+                Configure your Firecrawl API key to enable website scraping.
               </p>
               <div className="mt-3">
                 <ApiKeyManager />
@@ -263,7 +258,7 @@ export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
             </p>
           </div>
           <div className="flex gap-2">
-            <ApiKeyManager />
+            {websiteUrl && <ApiKeyManager />}
             {processedContent.documents.length > 0 && (
               <div className="flex items-center gap-1 px-3 py-1 bg-primary/10 rounded-full">
                 <FileText className="w-3 h-3 text-primary" />
