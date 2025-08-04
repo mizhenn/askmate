@@ -49,8 +49,10 @@ export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
   }, [uploadedFiles, websiteUrl]);
 
   const processContent = async () => {
+    console.log('processContent called with:', { uploadedFiles: uploadedFiles.length, websiteUrl });
     setIsProcessing(true);
     const processed: ProcessedContent = { documents: [] };
+    console.log('Starting content processing...');
 
     try {
       // Process uploaded documents
@@ -97,6 +99,7 @@ export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
       }
 
       setProcessedContent(processed);
+      console.log('Final processed content:', processed);
 
       // Generate welcome message based on processed content
       const welcomeContent = generateWelcomeMessage(processed);
