@@ -1,7 +1,9 @@
-// @ts-ignore
-import * as pdfjsLib from 'pdf-parse';
+import * as pdfjsLib from 'pdfjs-dist';
 // @ts-ignore  
 import * as mammoth from 'mammoth';
+
+// Set up PDF.js worker
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
 export class DocumentProcessor {
   static async extractTextFromFile(file: File): Promise<string> {
@@ -36,28 +38,28 @@ export class DocumentProcessor {
   private static async extractTextFromPDF(file: File): Promise<string> {
     try {
       const arrayBuffer = await file.arrayBuffer();
-      const uint8Array = new Uint8Array(arrayBuffer);
-      
-      // Use a simpler approach for browser environment
-      const text = await this.extractPDFTextFallback(uint8Array);
-      return text;
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      let fullText = '';
+
+      // Extract text from all pages
+      for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+        const page = await pdf.getPage(pageNum);
+        const textContent = await page.getTextContent();
+        const pageText = textContent.items
+          .map((item: any) => item.str)
+          .join(' ');
+        fullText += pageText + '\n';
+      }
+
+      if (!fullText.trim()) {
+        throw new Error('No text content found in PDF. This might be a scanned document or image-based PDF.');
+      }
+
+      return fullText.trim();
     } catch (error) {
       console.error('Error extracting PDF text:', error);
-      throw new Error('Failed to extract text from PDF. This file might be password protected or corrupted.');
+      throw new Error('Failed to extract text from PDF. This file might be password protected, corrupted, or contain only images.');
     }
-  }
-
-  private static async extractPDFTextFallback(data: Uint8Array): Promise<string> {
-    // Simple PDF text extraction fallback
-    const text = new TextDecoder().decode(data);
-    // Very basic PDF text extraction - look for text between stream markers
-    const textMatches = text.match(/\(([^)]+)\)/g);
-    if (textMatches) {
-      return textMatches.map(match => match.slice(1, -1)).join(' ');
-    }
-    
-    // Fallback: just inform user that PDF processing needs server-side support
-    throw new Error('PDF text extraction requires server-side processing. Please try a text or Word document instead.');
   }
 
   private static async extractTextFromDOCX(file: File): Promise<string> {
