@@ -38,7 +38,7 @@ export class DocumentProcessor {
 
   private static async extractTextFromPDF(file: File): Promise<string> {
     try {
-      // Use Supabase Edge Function for better PDF processing
+      // First try the Edge Function for PDF processing
       const formData = new FormData();
       formData.append('file', file);
 
@@ -47,22 +47,64 @@ export class DocumentProcessor {
         body: formData,
       });
 
-      if (!response.ok) {
-        throw new Error('PDF processing service unavailable');
-      }
-
-      const result = await response.json();
-      
-      if (result.success && result.text && result.text.length > 20) {
-        return result.text;
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success && result.text && result.text.length > 20) {
+          console.log('PDF processed successfully via Edge Function');
+          return result.text;
+        }
       }
       
-      throw new Error('No readable text found in PDF');
+      // Fallback to client-side extraction if Edge Function fails
+      console.log('Edge Function failed, trying client-side extraction');
+      return await this.extractTextFromPDFClientSide(file);
       
     } catch (error) {
       console.error('Error extracting PDF text:', error);
-      throw new Error("Unable to extract text from this PDF. Please try converting it to a Word document (.docx) or text file (.txt) for better results.");
+      // Try client-side fallback
+      try {
+        return await this.extractTextFromPDFClientSide(file);
+      } catch (fallbackError) {
+        throw new Error("Unable to extract text from this PDF. Please try converting it to a Word document (.docx) or text file (.txt) for better results.");
+      }
     }
+  }
+
+  private static async extractTextFromPDFClientSide(file: File): Promise<string> {
+    const arrayBuffer = await file.arrayBuffer();
+    const uint8Array = new Uint8Array(arrayBuffer);
+    const decoder = new TextDecoder('utf-8', { fatal: false });
+    let text = decoder.decode(uint8Array);
+    
+    // Extract readable text patterns from PDF
+    const lines: string[] = [];
+    
+    // Split by common PDF patterns and clean
+    const segments = text.split(/[\r\n]+/);
+    
+    for (const segment of segments) {
+      // Look for readable text (letters, numbers, common punctuation)
+      const cleanText = segment
+        .replace(/[^\x20-\x7E\u00A0-\u00FF]/g, ' ') // Keep printable chars
+        .replace(/\s+/g, ' ') // Normalize whitespace
+        .trim();
+      
+      // Only keep segments that look like real text
+      if (cleanText.length > 3 && /[a-zA-Z]/.test(cleanText)) {
+        // Filter out PDF metadata and structure
+        if (!cleanText.match(/^(obj|endobj|stream|endstream|xref|trailer|startxref)/i)) {
+          lines.push(cleanText);
+        }
+      }
+    }
+    
+    const result = lines.join('\n').trim();
+    
+    if (result.length < 50) {
+      throw new Error('Unable to extract readable text from this PDF. It may be image-based or heavily formatted.');
+    }
+    
+    return result;
   }
 
   private static async extractTextFromDOCX(file: File): Promise<string> {
