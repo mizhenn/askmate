@@ -25,18 +25,27 @@ serve(async (req) => {
       throw new Error('Question and context are required');
     }
 
-    const systemPrompt = `You are a helpful assistant that answers questions about ${contentType}s. 
-      You should provide accurate, helpful answers based only on the provided content. 
-      If the question cannot be answered from the content, say so clearly.
-      Keep your answers concise but informative.`;
+    const systemPrompt = `You are an intelligent document analysis assistant. Your task is to provide accurate, detailed answers based ONLY on the content provided to you.
 
-    const userPrompt = `Based on this ${contentType} content:
+IMPORTANT INSTRUCTIONS:
+- Read the content carefully and thoroughly
+- Answer questions directly and specifically based on what you find
+- If you see numbers, dates, symbols (like ≥, ≤, etc.), or specific text, mention them explicitly
+- Be precise and quote relevant parts when answering
+- If information exists in the document, provide it confidently
+- Only say you cannot find information if it's truly not present in the content
+- Look for patterns, numbers, mathematical expressions, dates, and technical terms
+- Pay special attention to numerical values, ranges, and mathematical symbols`;
 
+    const userPrompt = `Here is the ${contentType} content to analyze:
+
+=== DOCUMENT CONTENT ===
 ${context}
+=== END CONTENT ===
 
-Question: ${question}
+User Question: ${question}
 
-Please provide a clear, accurate answer based only on the content above.`;
+Please provide a thorough, accurate answer based on the content above. If you find relevant information, quote it directly. Be specific about numbers, dates, symbols, or any technical terms you see.`;
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -45,13 +54,13 @@ Please provide a clear, accurate answer based only on the content above.`;
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
+        model: 'gpt-4o',  // Using more powerful model for better accuracy
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
         ],
-        max_tokens: 1000,
-        temperature: 0.7,
+        max_tokens: 1500,  // More tokens for detailed answers
+        temperature: 0.1,  // Lower temperature for more factual responses
       }),
     });
 

@@ -224,13 +224,24 @@ async function extractTextAdvanced(arrayBuffer: ArrayBuffer): Promise<string> {
     throw new Error('No readable text found in PDF. The document may be image-based, encrypted, or corrupted.');
   }
   
-  // Join all extracted text and clean it up
+  // Join all extracted text and clean it up thoroughly
   let result = extractedTexts.join(' ')
+    .replace(/\s+/g, ' ')
+    .replace(/[^\x20-\x7E\u00A0-\u00FF≥≤±°×÷]/g, ' ') // Keep only readable chars + math symbols
     .replace(/\s+/g, ' ')
     .trim();
   
-  console.log('Final extracted text length:', result.length);
-  console.log('Sample of extracted text:', result.substring(0, 200));
+  // Remove obvious PDF artifacts that might confuse the AI
+  result = result
+    .replace(/\b(obj|endobj|stream|endstream|xref|trailer|startxref)\b/gi, '')
+    .replace(/\b\d+\s+\d+\s+R\b/g, '') // Remove PDF object references like "1 0 R"
+    .replace(/\/[A-Z][A-Za-z0-9]*\b/g, '') // Remove PDF commands like "/Type"
+    .replace(/<<|>>/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  
+  console.log('Final cleaned text length:', result.length);
+  console.log('Sample of cleaned text:', result.substring(0, 300));
   
   if (result.length < 30) {
     throw new Error('Extracted text is too short. PDF may contain only images or be heavily formatted.');
