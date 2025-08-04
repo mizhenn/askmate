@@ -38,56 +38,31 @@ export class DocumentProcessor {
 
   private static async extractTextFromPDF(file: File): Promise<string> {
     try {
-      // Simple text extraction approach that works for most PDFs
-      const arrayBuffer = await file.arrayBuffer();
-      const text = new TextDecoder('utf-8').decode(arrayBuffer);
+      // Use Supabase Edge Function for better PDF processing
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch('https://ncpifmvfijbtecwwymou.supabase.co/functions/v1/extract-pdf-text', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error('PDF processing service unavailable');
+      }
+
+      const result = await response.json();
       
-      // Extract text content using regex patterns for PDF structure
-      const textContent = this.extractPDFTextContent(text);
-      
-      if (textContent && textContent.length > 20) {
-        return textContent;
+      if (result.success && result.text && result.text.length > 20) {
+        return result.text;
       }
       
-      // If no meaningful content found, inform user
-      throw new Error('This PDF appears to be image-based or encrypted. Please try converting it to text or using a different document format.');
+      throw new Error('No readable text found in PDF');
       
     } catch (error) {
       console.error('Error extracting PDF text:', error);
-      throw new Error('Unable to extract text from this PDF. Please try a text file or Word document instead.');
+      throw new Error("Unable to extract text from this PDF. Please try converting it to a Word document (.docx) or text file (.txt) for better results.");
     }
-  }
-
-  private static extractPDFTextContent(pdfText: string): string {
-    // Look for text patterns in PDF
-    const patterns = [
-      /BT\s*.*?ET/gs, // Text blocks
-      /\((.*?)\)/g,   // Text in parentheses
-      /\[(.*?)\]/g,   // Text in brackets
-    ];
-    
-    let extractedText = '';
-    
-    for (const pattern of patterns) {
-      const matches = pdfText.match(pattern);
-      if (matches) {
-        for (const match of matches) {
-          let text = match
-            .replace(/BT|ET/g, '') // Remove text block markers
-            .replace(/[()[\]]/g, '') // Remove brackets and parentheses
-            .replace(/\\[rnt]/g, ' ') // Replace escape sequences
-            .replace(/[^\x20-\x7E]/g, ' ') // Keep only printable ASCII
-            .replace(/\s+/g, ' ') // Normalize whitespace
-            .trim();
-          
-          if (text.length > 2) {
-            extractedText += text + ' ';
-          }
-        }
-      }
-    }
-    
-    return extractedText.trim();
   }
 
   private static async extractTextFromDOCX(file: File): Promise<string> {
