@@ -91,65 +91,108 @@ serve(async (req) => {
 async function extractTextFallback(arrayBuffer: ArrayBuffer): Promise<string> {
   const uint8Array = new Uint8Array(arrayBuffer);
   const decoder = new TextDecoder('utf-8', { fatal: false });
-  let text = decoder.decode(uint8Array);
+  let rawText = decoder.decode(uint8Array);
   
-  // Look for text within PDF content streams
-  const extractedText: string[] = [];
+  console.log('PDF raw text length:', rawText.length);
   
-  // Method 1: Look for content between BT (Begin Text) and ET (End Text) markers
-  const textObjectMatches = text.match(/BT\s*([\s\S]*?)\s*ET/g);
-  if (textObjectMatches) {
-    for (const match of textObjectMatches) {
-      const content = match.replace(/^BT\s*/, '').replace(/\s*ET$/, '');
-      // Look for text strings in parentheses or brackets
-      const stringMatches = content.match(/\((.*?)\)/g) || content.match(/\[(.*?)\]/g);
-      if (stringMatches) {
-        for (const str of stringMatches) {
-          const cleanStr = str.replace(/[\(\)\[\]]/g, '').trim();
-          if (cleanStr.length > 2 && /[a-zA-Z]/.test(cleanStr)) {
-            extractedText.push(cleanStr);
+  // Method 1: Extract text from content streams using more aggressive parsing
+  const extractedTexts: string[] = [];
+  
+  // Look for actual readable text between stream boundaries
+  const streamMatches = rawText.match(/stream\s*\n([\s\S]*?)\s*endstream/gi);
+  if (streamMatches) {
+    console.log('Found', streamMatches.length, 'content streams');
+    
+    for (const stream of streamMatches) {
+      const content = stream.replace(/^stream\s*\n/i, '').replace(/\s*endstream$/i, '');
+      
+      // Try to find text operations in the stream
+      const textOperations = [
+        /\((.*?)\)\s*Tj/g,           // Simple text show
+        /\[(.*?)\]\s*TJ/g,          // Array text show  
+        /\((.*?)\)\s*'/g,           // Text with quote
+        /\((.*?)\)\s*"/g,           // Text with double quote
+        /"(.*?)"/g,                 // Quoted strings
+        /'(.*?)'/g                  // Single quoted strings
+      ];
+      
+      for (const regex of textOperations) {
+        let match;
+        while ((match = regex.exec(content)) !== null) {
+          let text = match[1];
+          if (text && text.length > 1) {
+            // Clean up escaped characters
+            text = text
+              .replace(/\\n/g, ' ')
+              .replace(/\\r/g, ' ')
+              .replace(/\\t/g, ' ')
+              .replace(/\\\\/g, '\\')
+              .replace(/\\'/g, "'")
+              .replace(/\\"/g, '"')
+              .trim();
+            
+            if (text.length > 2 && /[a-zA-Z]/.test(text)) {
+              extractedTexts.push(text);
+            }
           }
         }
       }
     }
   }
   
-  // Method 2: Look for Tj and TJ operators (show text)
-  const tjMatches = text.match(/\((.*?)\)\s*Tj/g);
-  if (tjMatches) {
-    for (const match of tjMatches) {
-      const content = match.replace(/\s*Tj$/, '').replace(/^\(/, '').replace(/\)$/, '');
-      if (content.length > 2 && /[a-zA-Z]/.test(content)) {
-        extractedText.push(content);
-      }
-    }
-  }
-  
-  // Method 3: Look for readable text patterns (fallback)
-  if (extractedText.length === 0) {
-    const segments = text.split(/[\r\n]+/);
+  // Method 2: Look for readable text patterns in the entire document
+  if (extractedTexts.length === 0) {
+    console.log('No text found in streams, trying direct extraction');
     
-    for (const segment of segments) {
-      const cleanText = segment
+    // Split by lines and look for readable content
+    const lines = rawText.split(/[\r\n]+/);
+    
+    for (const line of lines) {
+      // Clean the line and keep only printable characters
+      let cleanLine = line
         .replace(/[^\x20-\x7E\u00A0-\u00FF]/g, ' ')
         .replace(/\s+/g, ' ')
         .trim();
       
-      // Only keep segments that look like real text
-      if (cleanText.length > 5 && /[a-zA-Z]/.test(cleanText) && cleanText.split(' ').length > 1) {
-        // Filter out PDF structure elements
-        if (!cleanText.match(/^(obj|endobj|stream|endstream|xref|trailer|startxref|\/Type|\/Font|\/Page|<<|>>)/i)) {
-          extractedText.push(cleanText);
+      // Skip PDF structure elements
+      if (cleanLine.match(/^(obj|endobj|stream|endstream|xref|trailer|startxref|\/[A-Z]|<<|>>|\d+\s+\d+\s+R)/i)) {
+        continue;
+      }
+      
+      // Keep lines that look like real text
+      if (cleanLine.length > 5 && /[a-zA-Z]/.test(cleanLine)) {
+        const words = cleanLine.split(/\s+/);
+        if (words.length > 1 && words.some(word => word.length > 3)) {
+          extractedTexts.push(cleanLine);
         }
       }
     }
   }
   
-  const result = extractedText.join(' ').trim();
-  
-  if (result.length < 50) {
-    throw new Error('Unable to extract readable text from this PDF. It may be image-based or heavily formatted.');
+  // Method 3: Last resort - look for any readable strings
+  if (extractedTexts.length === 0) {
+    console.log('Still no text found, trying string extraction');
+    
+    const stringMatches = rawText.match(/[a-zA-Z][a-zA-Z0-9\s,.!?;:()]{10,}/g);
+    if (stringMatches) {
+      for (const str of stringMatches) {
+        const clean = str.trim();
+        if (clean.length > 10 && clean.split(/\s+/).length > 2) {
+          extractedTexts.push(clean);
+        }
+      }
+    }
   }
   
+  console.log('Extracted', extractedTexts.length, 'text segments');
+  
+  const result = extractedTexts.join(' ').trim();
+  
+  if (result.length < 50) {
+    console.log('Final result too short:', result.length, 'characters');
+    throw new Error('Unable to extract readable text from this PDF. The document may be image-based, encrypted, or heavily formatted.');
+  }
+  
+  console.log('Successfully extracted', result.length, 'characters of text');
   return result;
 }
