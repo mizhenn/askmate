@@ -56,13 +56,21 @@ export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
       // Process uploaded documents
       for (const file of uploadedFiles) {
         try {
+          console.log(`Processing file: ${file.name}, type: ${file.type}, size: ${file.size}`);
           const content = await DocumentProcessor.extractTextFromFile(file);
+          console.log(`Extracted content length: ${content.length}, preview: ${content.substring(0, 200)}`);
+          
+          if (content.length < 50) {
+            throw new Error('Extracted content is too short - may not contain readable text');
+          }
+          
           const summary = DocumentProcessor.summarizeText(content);
           processed.documents.push({
             name: file.name,
             content,
             summary
           });
+          console.log(`Successfully processed ${file.name}`);
         } catch (error) {
           console.error(`Error processing ${file.name}:`, error);
           toast.error(`Failed to process ${file.name}: ${error instanceof Error ? error.message : 'Unknown error'}`);
