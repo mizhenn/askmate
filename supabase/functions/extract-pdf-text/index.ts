@@ -93,29 +93,59 @@ async function extractTextFallback(arrayBuffer: ArrayBuffer): Promise<string> {
   const decoder = new TextDecoder('utf-8', { fatal: false });
   let text = decoder.decode(uint8Array);
   
-  // Extract readable text patterns from PDF
-  const lines: string[] = [];
+  // Look for text within PDF content streams
+  const extractedText: string[] = [];
   
-  // Split by common PDF patterns and clean
-  const segments = text.split(/[\r\n]+/);
-  
-  for (const segment of segments) {
-    // Look for readable text (letters, numbers, common punctuation)
-    const cleanText = segment
-      .replace(/[^\x20-\x7E\u00A0-\u00FF]/g, ' ') // Keep printable chars
-      .replace(/\s+/g, ' ') // Normalize whitespace
-      .trim();
-    
-    // Only keep segments that look like real text
-    if (cleanText.length > 3 && /[a-zA-Z]/.test(cleanText)) {
-      // Filter out PDF metadata and structure
-      if (!cleanText.match(/^(obj|endobj|stream|endstream|xref|trailer|startxref)/i)) {
-        lines.push(cleanText);
+  // Method 1: Look for content between BT (Begin Text) and ET (End Text) markers
+  const textObjectMatches = text.match(/BT\s*([\s\S]*?)\s*ET/g);
+  if (textObjectMatches) {
+    for (const match of textObjectMatches) {
+      const content = match.replace(/^BT\s*/, '').replace(/\s*ET$/, '');
+      // Look for text strings in parentheses or brackets
+      const stringMatches = content.match(/\((.*?)\)/g) || content.match(/\[(.*?)\]/g);
+      if (stringMatches) {
+        for (const str of stringMatches) {
+          const cleanStr = str.replace(/[\(\)\[\]]/g, '').trim();
+          if (cleanStr.length > 2 && /[a-zA-Z]/.test(cleanStr)) {
+            extractedText.push(cleanStr);
+          }
+        }
       }
     }
   }
   
-  const result = lines.join('\n').trim();
+  // Method 2: Look for Tj and TJ operators (show text)
+  const tjMatches = text.match(/\((.*?)\)\s*Tj/g);
+  if (tjMatches) {
+    for (const match of tjMatches) {
+      const content = match.replace(/\s*Tj$/, '').replace(/^\(/, '').replace(/\)$/, '');
+      if (content.length > 2 && /[a-zA-Z]/.test(content)) {
+        extractedText.push(content);
+      }
+    }
+  }
+  
+  // Method 3: Look for readable text patterns (fallback)
+  if (extractedText.length === 0) {
+    const segments = text.split(/[\r\n]+/);
+    
+    for (const segment of segments) {
+      const cleanText = segment
+        .replace(/[^\x20-\x7E\u00A0-\u00FF]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      
+      // Only keep segments that look like real text
+      if (cleanText.length > 5 && /[a-zA-Z]/.test(cleanText) && cleanText.split(' ').length > 1) {
+        // Filter out PDF structure elements
+        if (!cleanText.match(/^(obj|endobj|stream|endstream|xref|trailer|startxref|\/Type|\/Font|\/Page|<<|>>)/i)) {
+          extractedText.push(cleanText);
+        }
+      }
+    }
+  }
+  
+  const result = extractedText.join(' ').trim();
   
   if (result.length < 50) {
     throw new Error('Unable to extract readable text from this PDF. It may be image-based or heavily formatted.');
