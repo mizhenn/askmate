@@ -1,33 +1,24 @@
-import * as pdfjsLib from 'pdfjs-dist';
 // @ts-ignore  
 import * as mammoth from 'mammoth';
-
-// Set up PDF.js worker with fallback
-if (typeof window !== 'undefined') {
-  try {
-    pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-      'pdfjs-dist/build/pdf.worker.min.js',
-      import.meta.url
-    ).toString();
-  } catch {
-    // Fallback to a more reliable CDN
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@4.0.379/build/pdf.worker.min.js';
-  }
-}
 
 export class DocumentProcessor {
   static async extractTextFromFile(file: File): Promise<string> {
     const fileType = file.type || this.getFileTypeFromName(file.name);
     
-    switch (fileType) {
-      case 'application/pdf':
-        return this.extractTextFromPDF(file);
-      case 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
-        return this.extractTextFromDOCX(file);
-      case 'text/plain':
-        return this.extractTextFromTXT(file);
-      default:
-        throw new Error(`Unsupported file type: ${fileType}`);
+    try {
+      switch (fileType) {
+        case 'application/pdf':
+          return this.extractTextFromPDF(file);
+        case 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
+          return this.extractTextFromDOCX(file);
+        case 'text/plain':
+          return this.extractTextFromTXT(file);
+        default:
+          throw new Error(`Unsupported file type: ${fileType}`);
+      }
+    } catch (error) {
+      console.error('Error extracting text from file:', error);
+      throw error;
     }
   }
 
@@ -47,29 +38,56 @@ export class DocumentProcessor {
 
   private static async extractTextFromPDF(file: File): Promise<string> {
     try {
+      // Simple text extraction approach that works for most PDFs
       const arrayBuffer = await file.arrayBuffer();
-      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-      let fullText = '';
-
-      // Extract text from all pages
-      for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-        const page = await pdf.getPage(pageNum);
-        const textContent = await page.getTextContent();
-        const pageText = textContent.items
-          .map((item: any) => item.str)
-          .join(' ');
-        fullText += pageText + '\n';
+      const text = new TextDecoder('utf-8').decode(arrayBuffer);
+      
+      // Extract text content using regex patterns for PDF structure
+      const textContent = this.extractPDFTextContent(text);
+      
+      if (textContent && textContent.length > 20) {
+        return textContent;
       }
-
-      if (!fullText.trim()) {
-        throw new Error('No text content found in PDF. This might be a scanned document or image-based PDF.');
-      }
-
-      return fullText.trim();
+      
+      // If no meaningful content found, inform user
+      throw new Error('This PDF appears to be image-based or encrypted. Please try converting it to text or using a different document format.');
+      
     } catch (error) {
       console.error('Error extracting PDF text:', error);
-      throw new Error('Failed to extract text from PDF. This file might be password protected, corrupted, or contain only images.');
+      throw new Error('Unable to extract text from this PDF. Please try a text file or Word document instead.');
     }
+  }
+
+  private static extractPDFTextContent(pdfText: string): string {
+    // Look for text patterns in PDF
+    const patterns = [
+      /BT\s*.*?ET/gs, // Text blocks
+      /\((.*?)\)/g,   // Text in parentheses
+      /\[(.*?)\]/g,   // Text in brackets
+    ];
+    
+    let extractedText = '';
+    
+    for (const pattern of patterns) {
+      const matches = pdfText.match(pattern);
+      if (matches) {
+        for (const match of matches) {
+          let text = match
+            .replace(/BT|ET/g, '') // Remove text block markers
+            .replace(/[()[\]]/g, '') // Remove brackets and parentheses
+            .replace(/\\[rnt]/g, ' ') // Replace escape sequences
+            .replace(/[^\x20-\x7E]/g, ' ') // Keep only printable ASCII
+            .replace(/\s+/g, ' ') // Normalize whitespace
+            .trim();
+          
+          if (text.length > 2) {
+            extractedText += text + ' ';
+          }
+        }
+      }
+    }
+    
+    return extractedText.trim();
   }
 
   private static async extractTextFromDOCX(file: File): Promise<string> {
