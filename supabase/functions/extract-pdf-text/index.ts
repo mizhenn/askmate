@@ -24,49 +24,63 @@ serve(async (req) => {
       throw new Error('Only PDF files are supported');
     }
 
+    console.log(`Processing PDF: ${file.name}, size: ${file.size} bytes`);
+
     // Convert file to base64 for external API
     const arrayBuffer = await file.arrayBuffer();
     const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
 
-    // Use an external PDF processing service
-    const response = await fetch('https://api.pdf.co/v1/pdf/convert/to/text', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': 'demo' // Using demo key - user should replace with their own
-      },
-      body: JSON.stringify({
-        url: `data:application/pdf;base64,${base64}`,
-        inline: true
-      })
-    });
+    console.log('Converted to base64, length:', base64.length);
 
-    if (!response.ok) {
-      // Fallback: simple text extraction
-      const text = await extractTextFallback(arrayBuffer);
-      return new Response(JSON.stringify({ 
-        success: true, 
-        text: text,
-        source: 'fallback'
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    // Try external PDF processing service with better settings
+    try {
+      const response = await fetch('https://api.pdf.co/v1/pdf/convert/to/text', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': 'demo'
+        },
+        body: JSON.stringify({
+          url: `data:application/pdf;base64,${base64}`,
+          async: false,
+          inline: true,
+          lang: 'eng',
+          ocrLanguages: 'eng'
+        })
       });
+
+      console.log('PDF.co API response status:', response.status);
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log('PDF.co result keys:', Object.keys(result));
+        
+        if (result.body && result.body.trim().length > 50) {
+          const cleanText = result.body
+            .replace(/\s+/g, ' ')
+            .trim();
+          
+          console.log('Successfully extracted via API, length:', cleanText.length);
+          return new Response(JSON.stringify({ 
+            success: true, 
+            text: cleanText,
+            source: 'api'
+          }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        } else {
+          console.log('API returned insufficient text:', result.body?.length || 0);
+        }
+      } else {
+        console.log('API request failed:', response.status, response.statusText);
+      }
+    } catch (apiError) {
+      console.log('API error:', apiError.message);
     }
 
-    const result = await response.json();
-    
-    if (result.body && result.body.length > 20) {
-      return new Response(JSON.stringify({ 
-        success: true, 
-        text: result.body,
-        source: 'api'
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    // If API extraction failed, use fallback
-    const fallbackText = await extractTextFallback(arrayBuffer);
+    // Fallback: Simple but effective text extraction
+    console.log('Using fallback extraction method');
+    const fallbackText = await extractTextSimple(arrayBuffer);
     
     return new Response(JSON.stringify({ 
       success: true, 
@@ -88,96 +102,55 @@ serve(async (req) => {
   }
 });
 
-async function extractTextFallback(arrayBuffer: ArrayBuffer): Promise<string> {
+async function extractTextSimple(arrayBuffer: ArrayBuffer): Promise<string> {
   const uint8Array = new Uint8Array(arrayBuffer);
   const decoder = new TextDecoder('utf-8', { fatal: false });
-  let rawText = decoder.decode(uint8Array);
+  const pdfContent = decoder.decode(uint8Array);
   
-  console.log('PDF raw text length:', rawText.length);
+  console.log('PDF content length:', pdfContent.length);
   
-  // Method 1: Extract text from content streams using more aggressive parsing
   const extractedTexts: string[] = [];
   
-  // Look for actual readable text between stream boundaries
-  const streamMatches = rawText.match(/stream\s*\n([\s\S]*?)\s*endstream/gi);
-  if (streamMatches) {
-    console.log('Found', streamMatches.length, 'content streams');
-    
-    for (const stream of streamMatches) {
-      const content = stream.replace(/^stream\s*\n/i, '').replace(/\s*endstream$/i, '');
-      
-      // Try to find text operations in the stream
-      const textOperations = [
-        /\((.*?)\)\s*Tj/g,           // Simple text show
-        /\[(.*?)\]\s*TJ/g,          // Array text show  
-        /\((.*?)\)\s*'/g,           // Text with quote
-        /\((.*?)\)\s*"/g,           // Text with double quote
-        /"(.*?)"/g,                 // Quoted strings
-        /'(.*?)'/g                  // Single quoted strings
-      ];
-      
-      for (const regex of textOperations) {
-        let match;
-        while ((match = regex.exec(content)) !== null) {
-          let text = match[1];
-          if (text && text.length > 1) {
-            // Clean up escaped characters
-            text = text
-              .replace(/\\n/g, ' ')
-              .replace(/\\r/g, ' ')
-              .replace(/\\t/g, ' ')
-              .replace(/\\\\/g, '\\')
-              .replace(/\\'/g, "'")
-              .replace(/\\"/g, '"')
-              .trim();
-            
-            if (text.length > 2 && /[a-zA-Z]/.test(text)) {
-              extractedTexts.push(text);
-            }
-          }
-        }
+  // Method 1: Look for text between parentheses in PDF content streams
+  // This is the most common way text is stored in PDFs: (Text content) Tj
+  const textInParens = pdfContent.match(/\(([^)]+)\)\s*Tj/g);
+  if (textInParens) {
+    console.log('Found', textInParens.length, 'text operations');
+    for (const match of textInParens) {
+      const text = match.replace(/^\(/, '').replace(/\)\s*Tj$/, '');
+      if (text.length > 1 && /[a-zA-Z]/.test(text)) {
+        extractedTexts.push(text);
       }
     }
   }
   
-  // Method 2: Look for readable text patterns in the entire document
-  if (extractedTexts.length === 0) {
-    console.log('No text found in streams, trying direct extraction');
-    
-    // Split by lines and look for readable content
-    const lines = rawText.split(/[\r\n]+/);
-    
-    for (const line of lines) {
-      // Clean the line and keep only printable characters
-      let cleanLine = line
-        .replace(/[^\x20-\x7E\u00A0-\u00FF]/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-      
-      // Skip PDF structure elements
-      if (cleanLine.match(/^(obj|endobj|stream|endstream|xref|trailer|startxref|\/[A-Z]|<<|>>|\d+\s+\d+\s+R)/i)) {
-        continue;
-      }
-      
-      // Keep lines that look like real text
-      if (cleanLine.length > 5 && /[a-zA-Z]/.test(cleanLine)) {
-        const words = cleanLine.split(/\s+/);
-        if (words.length > 1 && words.some(word => word.length > 3)) {
-          extractedTexts.push(cleanLine);
-        }
+  // Method 2: Look for text in bracket arrays: [(Text)] TJ
+  const textInBrackets = pdfContent.match(/\[\s*\(([^)]+)\)\s*\]\s*TJ/g);
+  if (textInBrackets) {
+    console.log('Found', textInBrackets.length, 'array text operations');
+    for (const match of textInBrackets) {
+      const text = match.replace(/^\[\s*\(/, '').replace(/\)\s*\]\s*TJ$/, '');
+      if (text.length > 1 && /[a-zA-Z]/.test(text)) {
+        extractedTexts.push(text);
       }
     }
   }
   
-  // Method 3: Last resort - look for any readable strings
+  // Method 3: Simple pattern matching for readable text
   if (extractedTexts.length === 0) {
-    console.log('Still no text found, trying string extraction');
+    console.log('No structured text found, trying pattern matching');
     
-    const stringMatches = rawText.match(/[a-zA-Z][a-zA-Z0-9\s,.!?;:()]{10,}/g);
-    if (stringMatches) {
-      for (const str of stringMatches) {
-        const clean = str.trim();
-        if (clean.length > 10 && clean.split(/\s+/).length > 2) {
+    // Look for sequences of readable characters
+    const readablePattern = /[A-Za-z][A-Za-z0-9\s,.!?;:\-()]{8,}/g;
+    const matches = pdfContent.match(readablePattern);
+    
+    if (matches) {
+      for (const match of matches) {
+        const clean = match.trim();
+        // Skip obvious PDF structure
+        if (!clean.match(/^(obj|endobj|stream|endstream|xref|trailer)/i) && 
+            !clean.match(/^\/[A-Z]/i) && 
+            clean.split(' ').length > 2) {
           extractedTexts.push(clean);
         }
       }
@@ -186,13 +159,20 @@ async function extractTextFallback(arrayBuffer: ArrayBuffer): Promise<string> {
   
   console.log('Extracted', extractedTexts.length, 'text segments');
   
-  const result = extractedTexts.join(' ').trim();
-  
-  if (result.length < 50) {
-    console.log('Final result too short:', result.length, 'characters');
-    throw new Error('Unable to extract readable text from this PDF. The document may be image-based, encrypted, or heavily formatted.');
+  if (extractedTexts.length === 0) {
+    throw new Error('No readable text found in PDF. The document may be image-based or encrypted.');
   }
   
-  console.log('Successfully extracted', result.length, 'characters of text');
+  // Join and clean up the extracted text
+  let result = extractedTexts.join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  
+  console.log('Final text length:', result.length);
+  
+  if (result.length < 50) {
+    throw new Error('Extracted text is too short. PDF may contain only images or be corrupted.');
+  }
+  
   return result;
 }
