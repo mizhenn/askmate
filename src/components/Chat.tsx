@@ -129,10 +129,10 @@ export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
     return content.split('\n').map((line, index) => {
       // Handle headers
       if (line.startsWith('# ')) {
-        return <h2 key={index} className="font-bold text-xl text-foreground mt-4 mb-3">{renderText(line.substring(2))}</h2>;
+        return <h2 key={index} className="font-bold text-xl text-foreground mt-4 mb-3 font-heading">{renderText(line.substring(2))}</h2>;
       }
       if (line.startsWith('## ')) {
-        return <h3 key={index} className="font-semibold text-lg text-foreground mt-4 mb-2 border-b border-border/30 pb-1">{renderText(line.substring(3))}</h3>;
+        return <h3 key={index} className="font-semibold text-lg text-foreground mt-4 mb-2 border-b border-border/30 pb-1 font-heading">{renderText(line.substring(3))}</h3>;
       }
       
       // Handle bullet points
@@ -298,7 +298,7 @@ export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
           <div className="flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5" />
             <div className="flex-1">
-              <h4 className="font-medium text-amber-800">Firecrawl API Key Required</h4>
+              <h4 className="font-medium text-amber-800 font-heading">Firecrawl API Key Required</h4>
               <p className="text-sm text-amber-700 mt-1">
                 Configure your Firecrawl API key to enable website scraping.
               </p>
@@ -332,7 +332,7 @@ export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
             <Sparkles className="w-6 h-6 text-white" />
           </div>
           <div className="flex-1">
-            <h3 className="text-lg font-semibold text-foreground">AI Document Assistant</h3>
+            <h3 className="text-lg font-semibold text-foreground font-heading">AI Document Assistant</h3>
             <p className="text-sm text-muted-foreground">
               Ask questions about your {uploadedFiles.length > 0 && `${uploadedFiles.length} uploaded file(s)`}
               {uploadedFiles.length > 0 && websiteUrl && ' and '}

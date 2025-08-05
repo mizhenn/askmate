@@ -15,7 +15,7 @@ export const Hero = () => {
           {/* Content */}
           <div className="space-y-8">
             <div className="space-y-6">
-              <h1 className="text-5xl lg:text-6xl font-bold tracking-tight text-foreground leading-tight">
+              <h1 className="text-5xl lg:text-6xl font-bold tracking-tight text-foreground leading-tight font-heading">
                 Ask questions about any
                 <span className="bg-gradient-primary bg-clip-text text-transparent"> document</span>
               </h1>
