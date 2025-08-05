@@ -146,22 +146,31 @@ async function extractTextWithDecompression(arrayBuffer: ArrayBuffer): Promise<s
   
   const extractedTexts: string[] = [];
   
-  // Method 1: Extract and decompress FlateDecode streams
+  // Method 1: Extract and decompress FlateDecode streams with limit
   const streamPattern = /(\d+\s+\d+\s+obj[\s\S]*?stream\s*\n)([\s\S]*?)(\s*endstream)/g;
   let streamMatch;
+  let matchCount = 0;
+  const maxMatches = 50; // Prevent infinite loops
   
-  while ((streamMatch = streamPattern.exec(pdfContent)) !== null) {
+  while ((streamMatch = streamPattern.exec(pdfContent)) !== null && matchCount < maxMatches) {
+    matchCount++;
     const streamData = streamMatch[2];
+    
+    // Skip very large streams that might cause issues
+    if (streamData.length > 100000) {
+      console.log('Skipping large stream to prevent memory issues');
+      continue;
+    }
     
     try {
       // Try to decompress if it's FlateDecode
       if (streamMatch[1].includes('/FlateDecode')) {
         console.log('Found FlateDecode stream, attempting decompression...');
         // For now, we'll parse the raw stream content
-        await parseStreamContent(streamData, extractedTexts);
+        parseStreamContent(streamData, extractedTexts);
       } else {
         // Parse uncompressed stream
-        await parseStreamContent(streamData, extractedTexts);
+        parseStreamContent(streamData, extractedTexts);
       }
     } catch (error) {
       console.log('Stream parsing failed:', error.message);
@@ -232,7 +241,7 @@ async function extractTextWithDecompression(arrayBuffer: ArrayBuffer): Promise<s
   return result;
 }
 
-async function parseStreamContent(streamData: string, extractedTexts: string[]): Promise<void> {
+function parseStreamContent(streamData: string, extractedTexts: string[]): void {
   // Look for text operations within the stream
   const textOperations = [
     /BT\s*([\s\S]*?)\s*ET/g,
