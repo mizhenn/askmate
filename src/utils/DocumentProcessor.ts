@@ -1,7 +1,9 @@
 // @ts-ignore  
 import * as mammoth from 'mammoth';
-// @ts-ignore
-import * as pdfParse from 'pdf-parse';
+import * as pdfjsLib from 'pdfjs-dist';
+
+// Configure PDF.js worker
+pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.js`;
 
 export class DocumentProcessor {
   static async extractTextFromFile(file: File): Promise<string> {
@@ -46,18 +48,37 @@ export class DocumentProcessor {
       const arrayBuffer = await file.arrayBuffer();
       console.log('File converted to array buffer');
       
+      // Try browser-compatible PDF.js for reliable PDF text extraction
       try {
-        // Use pdf-parse library for reliable PDF text extraction
-        const data = await pdfParse(arrayBuffer);
-        console.log(`PDF parsed successfully, extracted ${data.text.length} characters`);
+        console.log('Attempting PDF.js extraction...');
+        const loadingTask = pdfjsLib.getDocument(arrayBuffer);
+        const pdf = await loadingTask.promise;
+        console.log(`PDF loaded successfully, ${pdf.numPages} pages`);
         
-        if (data.text && data.text.trim().length > 20) {
-          const cleanText = this.cleanExtractedText(data.text);
-          console.log(`Clean text length: ${cleanText.length}, preview: ${cleanText.substring(0, 200)}`);
+        let fullText = '';
+        
+        // Extract text from each page
+        for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+          const page = await pdf.getPage(pageNum);
+          const textContent = await page.getTextContent();
+          
+          // Combine all text items from the page
+          const pageText = textContent.items
+            .map((item: any) => item.str)
+            .join(' ');
+          
+          fullText += pageText + '\n';
+          console.log(`Page ${pageNum} extracted: ${pageText.length} characters`);
+        }
+        
+        if (fullText && fullText.trim().length > 20) {
+          const cleanText = this.cleanExtractedText(fullText);
+          console.log(`PDF.js extraction successful: ${cleanText.length} characters`);
+          console.log(`Preview: ${cleanText.substring(0, 200)}`);
           return cleanText;
         }
-      } catch (pdfParseError) {
-        console.log('pdf-parse failed, trying Edge Function:', pdfParseError);
+      } catch (pdfjsError) {
+        console.log('PDF.js failed, trying Edge Function:', pdfjsError);
       }
 
       // Fallback to Edge Function if pdf-parse fails
