@@ -119,29 +119,62 @@ export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
     }
   };
 
-  const formatAssistantMessage = (content: string): string => {
-    return content
-      // Format bold text with **
-      .replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-foreground">$1</strong>')
-      // Format bullet points
-      .replace(/^•\s(.+)$/gm, '<div class="flex items-start gap-2 my-1"><span class="text-primary font-medium">•</span><span>$1</span></div>')
-      // Format numbered lists
-      .replace(/^(\d+)\.\s(.+)$/gm, '<div class="flex items-start gap-2 my-1"><span class="text-primary font-medium min-w-[1.5rem]">$1.</span><span>$2</span></div>')
-      // Format headers with ##
-      .replace(/^##\s(.+)$/gm, '<h3 class="font-semibold text-lg text-foreground mt-4 mb-2 border-b border-border/30 pb-1">$1</h3>')
-      // Format headers with #
-      .replace(/^#\s(.+)$/gm, '<h2 class="font-bold text-xl text-foreground mt-4 mb-3">$1</h2>')
-      // Format code blocks
-      .replace(/```([\s\S]*?)```/g, '<pre class="bg-muted rounded-lg p-3 my-2 overflow-x-auto border border-border/50"><code class="text-sm">$1</code></pre>')
-      // Format inline code
-      .replace(/`([^`]+)`/g, '<code class="bg-muted px-1.5 py-0.5 rounded text-sm font-mono border border-border/30">$1</code>')
-      // Format line breaks properly
-      .replace(/\n\n/g, '</p><p class="mt-3">')
-      .replace(/\n/g, '<br>')
-      // Wrap in paragraph if not already formatted
-      .replace(/^(?!<[h2-6]|<div|<pre|<ul|<ol)(.+)/, '<p>$1</p>')
-      // Format emojis in a nice way
-      .replace(/(📄|🌐|✅|❌|⚠️|📊|📈|📉|💡|🔍|📋|📝)/g, '<span class="text-base mr-1">$1</span>');
+  const formatAssistantMessage = (content: string) => {
+    return content.split('\n').map((line, index) => {
+      // Handle headers
+      if (line.startsWith('# ')) {
+        return <h2 key={index} className="font-bold text-xl text-foreground mt-4 mb-3">{line.substring(2)}</h2>;
+      }
+      if (line.startsWith('## ')) {
+        return <h3 key={index} className="font-semibold text-lg text-foreground mt-4 mb-2 border-b border-border/30 pb-1">{line.substring(3)}</h3>;
+      }
+      
+      // Handle bullet points
+      if (line.startsWith('• ')) {
+        const content = line.substring(2);
+        const boldMatch = content.match(/\*\*(.*?)\*\*(.*)/);
+        if (boldMatch) {
+          return (
+            <div key={index} className="flex items-start gap-2 my-1">
+              <span className="text-primary font-medium">•</span>
+              <span>
+                <strong className="font-semibold text-foreground">{boldMatch[1]}</strong>
+                {boldMatch[2]}
+              </span>
+            </div>
+          );
+        }
+        return (
+          <div key={index} className="flex items-start gap-2 my-1">
+            <span className="text-primary font-medium">•</span>
+            <span>{content}</span>
+          </div>
+        );
+      }
+      
+      // Handle bold text
+      if (line.includes('**')) {
+        const parts = line.split(/(\*\*.*?\*\*)/);
+        return (
+          <p key={index} className="my-2">
+            {parts.map((part, partIndex) => {
+              if (part.startsWith('**') && part.endsWith('**')) {
+                return <strong key={partIndex} className="font-semibold text-foreground">{part.slice(2, -2)}</strong>;
+              }
+              return part;
+            })}
+          </p>
+        );
+      }
+      
+      // Handle empty lines
+      if (line.trim() === '') {
+        return <div key={index} className="h-2" />;
+      }
+      
+      // Regular text
+      return <p key={index} className="my-1">{line}</p>;
+    });
   };
 
   const generateWelcomeMessage = (content: ProcessedContent): string => {
@@ -343,12 +376,9 @@ export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
               >
                 {message.sender === 'assistant' ? (
                   <div className="prose prose-sm max-w-none dark:prose-invert">
-                    <div 
-                      className="text-sm leading-relaxed whitespace-pre-wrap"
-                      dangerouslySetInnerHTML={{
-                        __html: formatAssistantMessage(message.content)
-                      }}
-                    />
+                    <div className="text-sm leading-relaxed whitespace-pre-wrap space-y-2">
+                      {formatAssistantMessage(message.content)}
+                    </div>
                   </div>
                 ) : (
                   <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
