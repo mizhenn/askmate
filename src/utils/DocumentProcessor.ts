@@ -1,9 +1,5 @@
 // @ts-ignore  
 import * as mammoth from 'mammoth';
-import * as pdfjsLib from 'pdfjs-dist';
-
-// Configure PDF.js worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.js`;
 
 export class DocumentProcessor {
   static async extractTextFromFile(file: File): Promise<string> {
@@ -44,48 +40,12 @@ export class DocumentProcessor {
     try {
       console.log(`Starting PDF extraction for: ${file.name}, size: ${file.size} bytes`);
       
-      // Try client-side PDF parsing first with pdf-parse library
-      const arrayBuffer = await file.arrayBuffer();
-      console.log('File converted to array buffer');
-      
-      // Try browser-compatible PDF.js for reliable PDF text extraction
-      try {
-        console.log('Attempting PDF.js extraction...');
-        const loadingTask = pdfjsLib.getDocument(arrayBuffer);
-        const pdf = await loadingTask.promise;
-        console.log(`PDF loaded successfully, ${pdf.numPages} pages`);
-        
-        let fullText = '';
-        
-        // Extract text from each page
-        for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-          const page = await pdf.getPage(pageNum);
-          const textContent = await page.getTextContent();
-          
-          // Combine all text items from the page
-          const pageText = textContent.items
-            .map((item: any) => item.str)
-            .join(' ');
-          
-          fullText += pageText + '\n';
-          console.log(`Page ${pageNum} extracted: ${pageText.length} characters`);
-        }
-        
-        if (fullText && fullText.trim().length > 20) {
-          const cleanText = this.cleanExtractedText(fullText);
-          console.log(`PDF.js extraction successful: ${cleanText.length} characters`);
-          console.log(`Preview: ${cleanText.substring(0, 200)}`);
-          return cleanText;
-        }
-      } catch (pdfjsError) {
-        console.log('PDF.js failed, trying Edge Function:', pdfjsError);
-      }
-
-      // Fallback to Edge Function if pdf-parse fails
+      // Try Edge Function first for reliable PDF text extraction
       try {
         const formData = new FormData();
         formData.append('file', file);
 
+        console.log('Attempting Edge Function extraction...');
         const response = await fetch('https://ncpifmvfijbtecwwymou.supabase.co/functions/v1/extract-pdf-text', {
           method: 'POST',
           body: formData,
@@ -93,18 +53,26 @@ export class DocumentProcessor {
 
         if (response.ok) {
           const result = await response.json();
+          console.log('Edge Function response:', result);
+          
           if (result.success && result.text && result.text.length > 20) {
             console.log('PDF processed successfully via Edge Function');
             const cleanText = this.cleanExtractedText(result.text);
+            console.log(`Clean text length: ${cleanText.length}, preview: ${cleanText.substring(0, 200)}`);
             return cleanText;
+          } else {
+            console.log('Edge Function returned insufficient text:', result);
           }
+        } else {
+          const errorText = await response.text();
+          console.log('Edge Function failed with status:', response.status, errorText);
         }
       } catch (edgeFunctionError) {
         console.log('Edge Function failed:', edgeFunctionError);
       }
       
-      // Final fallback to basic client-side extraction
-      console.log('All methods failed, trying basic client-side extraction');
+      // Fallback to enhanced client-side extraction
+      console.log('Trying enhanced client-side extraction...');
       return await this.extractTextFromPDFClientSide(file);
       
     } catch (error) {
@@ -130,40 +98,82 @@ export class DocumentProcessor {
   }
 
   private static async extractTextFromPDFClientSide(file: File): Promise<string> {
+    console.log('Starting enhanced client-side PDF extraction...');
     const arrayBuffer = await file.arrayBuffer();
     const uint8Array = new Uint8Array(arrayBuffer);
-    const decoder = new TextDecoder('utf-8', { fatal: false });
-    let text = decoder.decode(uint8Array);
     
-    // Extract readable text patterns from PDF
+    // Try different encoding approaches
+    const decoders = [
+      new TextDecoder('utf-8', { fatal: false }),
+      new TextDecoder('latin1', { fatal: false }),
+      new TextDecoder('windows-1252', { fatal: false })
+    ];
+    
+    let bestText = '';
+    let bestScore = 0;
+    
+    for (const decoder of decoders) {
+      try {
+        const text = decoder.decode(uint8Array);
+        const lines = this.extractReadableLines(text);
+        const score = this.scoreExtractedText(lines.join('\n'));
+        
+        if (score > bestScore) {
+          bestScore = score;
+          bestText = lines.join('\n');
+        }
+      } catch (e) {
+        console.log('Decoder failed:', e);
+      }
+    }
+    
+    if (bestText.length < 50) {
+      throw new Error('Unable to extract readable text from this PDF. It may be image-based, password-protected, or heavily formatted.');
+    }
+    
+    console.log(`Client-side extraction successful: ${bestText.length} characters, score: ${bestScore}`);
+    return this.cleanExtractedText(bestText);
+  }
+
+  private static extractReadableLines(text: string): string[] {
     const lines: string[] = [];
-    
-    // Split by common PDF patterns and clean
     const segments = text.split(/[\r\n]+/);
     
     for (const segment of segments) {
-      // Look for readable text (letters, numbers, common punctuation)
+      // Clean and normalize the segment
       const cleanText = segment
-        .replace(/[^\x20-\x7E\u00A0-\u00FF]/g, ' ') // Keep printable chars
+        .replace(/[^\x20-\x7E\u00A0-\u00FF≥≤±°µ§]/g, ' ') // Keep printable chars + common symbols
         .replace(/\s+/g, ' ') // Normalize whitespace
         .trim();
       
       // Only keep segments that look like real text
-      if (cleanText.length > 3 && /[a-zA-Z]/.test(cleanText)) {
+      if (cleanText.length > 2 && /[a-zA-Z]/.test(cleanText)) {
         // Filter out PDF metadata and structure
-        if (!cleanText.match(/^(obj|endobj|stream|endstream|xref|trailer|startxref)/i)) {
+        if (!cleanText.match(/^(obj|endobj|stream|endstream|xref|trailer|startxref|\/[A-Z])/i)) {
           lines.push(cleanText);
         }
       }
     }
     
-    const result = lines.join('\n').trim();
+    return lines;
+  }
+
+  private static scoreExtractedText(text: string): number {
+    let score = 0;
     
-    if (result.length < 50) {
-      throw new Error('Unable to extract readable text from this PDF. It may be image-based or heavily formatted.');
-    }
+    // Score based on common resume/document patterns
+    if (/\b\d{4}\b/.test(text)) score += 10; // Years
+    if (/\b\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}\b/.test(text)) score += 10; // Dates
+    if (/\b[A-Z][a-z]+\s+[A-Z][a-z]+\b/.test(text)) score += 15; // Names
+    if (/\b\w+@\w+\.\w+\b/.test(text)) score += 20; // Email
+    if (/\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b/.test(text)) score += 15; // Phone
+    if (/\b(experience|education|skills|work|job|university|degree)\b/i.test(text)) score += 25; // Resume keywords
     
-    return result;
+    // Penalty for too much garbage
+    const garbageRatio = (text.match(/[^\w\s.,-]/g) || []).length / text.length;
+    if (garbageRatio > 0.3) score -= 50;
+    
+    return score;
   }
 
   private static async extractTextFromDOCX(file: File): Promise<string> {
