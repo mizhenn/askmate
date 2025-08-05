@@ -1,5 +1,7 @@
 // @ts-ignore  
 import * as mammoth from 'mammoth';
+// @ts-ignore
+import * as pdfParse from 'pdf-parse';
 
 export class DocumentProcessor {
   static async extractTextFromFile(file: File): Promise<string> {
@@ -38,36 +40,72 @@ export class DocumentProcessor {
 
   private static async extractTextFromPDF(file: File): Promise<string> {
     try {
-      // First try the Edge Function for PDF processing
-      const formData = new FormData();
-      formData.append('file', file);
-
-      const response = await fetch('https://ncpifmvfijbtecwwymou.supabase.co/functions/v1/extract-pdf-text', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        if (result.success && result.text && result.text.length > 20) {
-          console.log('PDF processed successfully via Edge Function');
-          return result.text;
+      console.log(`Starting PDF extraction for: ${file.name}, size: ${file.size} bytes`);
+      
+      // Try client-side PDF parsing first with pdf-parse library
+      const arrayBuffer = await file.arrayBuffer();
+      console.log('File converted to array buffer');
+      
+      try {
+        // Use pdf-parse library for reliable PDF text extraction
+        const data = await pdfParse(arrayBuffer);
+        console.log(`PDF parsed successfully, extracted ${data.text.length} characters`);
+        
+        if (data.text && data.text.trim().length > 20) {
+          const cleanText = this.cleanExtractedText(data.text);
+          console.log(`Clean text length: ${cleanText.length}, preview: ${cleanText.substring(0, 200)}`);
+          return cleanText;
         }
+      } catch (pdfParseError) {
+        console.log('pdf-parse failed, trying Edge Function:', pdfParseError);
+      }
+
+      // Fallback to Edge Function if pdf-parse fails
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await fetch('https://ncpifmvfijbtecwwymou.supabase.co/functions/v1/extract-pdf-text', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          if (result.success && result.text && result.text.length > 20) {
+            console.log('PDF processed successfully via Edge Function');
+            const cleanText = this.cleanExtractedText(result.text);
+            return cleanText;
+          }
+        }
+      } catch (edgeFunctionError) {
+        console.log('Edge Function failed:', edgeFunctionError);
       }
       
-      // Fallback to client-side extraction if Edge Function fails
-      console.log('Edge Function failed, trying client-side extraction');
+      // Final fallback to basic client-side extraction
+      console.log('All methods failed, trying basic client-side extraction');
       return await this.extractTextFromPDFClientSide(file);
       
     } catch (error) {
       console.error('Error extracting PDF text:', error);
-      // Try client-side fallback
-      try {
-        return await this.extractTextFromPDFClientSide(file);
-      } catch (fallbackError) {
-        throw new Error("Unable to extract text from this PDF. Please try converting it to a Word document (.docx) or text file (.txt) for better results.");
-      }
+      throw new Error("Unable to extract text from this PDF. The document may be image-based, encrypted, or corrupted. Please try converting it to a Word document (.docx) or text file (.txt) for better results.");
     }
+  }
+
+  private static cleanExtractedText(text: string): string {
+    return text
+      // Remove excessive whitespace but preserve line breaks
+      .replace(/[ \t]+/g, ' ')
+      // Remove multiple consecutive line breaks
+      .replace(/\n\s*\n\s*\n/g, '\n\n')
+      // Remove PDF artifacts and control characters
+      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+      // Trim whitespace from each line
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line.length > 0)
+      .join('\n')
+      .trim();
   }
 
   private static async extractTextFromPDFClientSide(file: File): Promise<string> {
