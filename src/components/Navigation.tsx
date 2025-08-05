@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { FileQuestion, Menu, X } from "lucide-react";
 import { toast } from "sonner";
 import { useState } from "react";
+import { ThemeToggle } from "./ThemeToggle";
 
 export const Navigation = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -19,7 +20,7 @@ export const Navigation = () => {
           </div>
 
           {/* Desktop Navigation */}
-          <div className="hidden md:flex items-center gap-8">
+          <div className="hidden md:flex items-center gap-6">
             <a href="#features" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
               Features
             </a>
@@ -29,6 +30,7 @@ export const Navigation = () => {
             <a href="#how-it-works" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
               How it works
             </a>
+            <ThemeToggle />
             <Button 
               variant="outline" 
               size="sm"
@@ -51,14 +53,17 @@ export const Navigation = () => {
           </div>
 
           {/* Mobile menu button */}
-          <Button
+          <div className="md:hidden flex items-center gap-2">
+            <ThemeToggle />
+            <Button
             variant="ghost"
             size="sm"
             className="md:hidden"
             onClick={() => setIsMenuOpen(!isMenuOpen)}
-          >
-            {isMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-          </Button>
+            >
+              {isMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </Button>
+          </div>
         </div>
 
         {/* Mobile Navigation */}
