@@ -17,10 +17,10 @@ export const Hero = () => {
             <div className="space-y-6">
               <h1 className="text-5xl lg:text-6xl font-bold tracking-tight text-foreground leading-tight font-heading">
                 Ask questions about any
-                <span className="bg-gradient-primary bg-clip-text text-transparent"> document</span>
+                <span className="bg-gradient-primary bg-clip-text text-transparent"> document or website</span>
               </h1>
               <p className="text-xl text-muted-foreground leading-relaxed max-w-2xl">
-                Upload documents or share website links, then chat with AI to get instant answers. 
+                Upload documents or share website links, then chat with your AI mate to get instant answers. 
                 Private, secure, and designed for everyone—no AI experience needed.
               </p>
             </div>
@@ -75,7 +75,7 @@ export const Hero = () => {
             <div className="relative z-10">
               <img
                 src={heroImage}
-                alt="Document analysis illustration"
+                alt="AskMate - AI document and website analysis illustration"
                 className="w-full max-w-lg mx-auto rounded-2xl shadow-large"
               />
             </div>

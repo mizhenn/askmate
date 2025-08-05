@@ -205,7 +205,7 @@ export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
     message += "• Answer specific questions about the content\n";
     message += "• Extract important data, dates, or numbers\n";
     message += "• Compare information across documents\n\n";
-    message += "Just type your question below to get started! 🚀";
+    message += "Just type your question below and let your AI mate help! 🚀";
     return message;
   };
 
@@ -332,7 +332,7 @@ export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
             <Sparkles className="w-6 h-6 text-white" />
           </div>
           <div className="flex-1">
-            <h3 className="text-lg font-semibold text-foreground font-heading">AI Document Assistant</h3>
+            <h3 className="text-lg font-semibold text-foreground font-heading">AskMate AI Assistant</h3>
             <p className="text-sm text-muted-foreground">
               Ask questions about your {uploadedFiles.length > 0 && `${uploadedFiles.length} uploaded file(s)`}
               {uploadedFiles.length > 0 && websiteUrl && ' and '}
@@ -449,7 +449,7 @@ export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
       <Card className="p-4">
         <div className="flex gap-3">
           <Input
-            placeholder="Ask a question about your document or website..."
+            placeholder="Ask your AI mate about your document or website..."
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyPress={handleKeyPress}
