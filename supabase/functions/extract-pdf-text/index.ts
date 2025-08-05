@@ -109,15 +109,15 @@ serve(async (req) => {
       console.log('PDF.co OCR failed:', error.message);
     }
     
-    // Method 3: Advanced PDF parsing with decompression
-    console.log('Attempting advanced PDF parsing...');
-    extractedText = await extractTextWithDecompression(arrayBuffer);
+    // Method 3: Simple but effective text extraction
+    console.log('Attempting simple text extraction...');
+    extractedText = extractSimpleText(arrayBuffer);
     
-    if (extractedText.length > 30) {
+    if (extractedText.length > 50) {
       return new Response(JSON.stringify({ 
         success: true, 
         text: extractedText,
-        source: 'advanced-parsing'
+        source: 'simple-extraction'
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -137,101 +137,84 @@ serve(async (req) => {
   }
 });
 
-async function extractTextWithDecompression(arrayBuffer: ArrayBuffer): Promise<string> {
+function extractSimpleText(arrayBuffer: ArrayBuffer): string {
   const uint8Array = new Uint8Array(arrayBuffer);
   const decoder = new TextDecoder('utf-8', { fatal: false });
-  const pdfContent = decoder.decode(uint8Array);
+  const content = decoder.decode(uint8Array);
   
-  console.log('Advanced parsing - PDF content length:', pdfContent.length);
+  console.log('Simple extraction - content length:', content.length);
   
-  const extractedTexts: string[] = [];
+  // Extract text between BT and ET (text blocks)
+  const textBlocks: string[] = [];
+  const btPattern = /BT\s*([\s\S]*?)\s*ET/g;
+  let btMatch;
   
-  // Method 1: Extract and decompress FlateDecode streams with limit
-  const streamPattern = /(\d+\s+\d+\s+obj[\s\S]*?stream\s*\n)([\s\S]*?)(\s*endstream)/g;
-  let streamMatch;
-  let matchCount = 0;
-  const maxMatches = 50; // Prevent infinite loops
-  
-  while ((streamMatch = streamPattern.exec(pdfContent)) !== null && matchCount < maxMatches) {
-    matchCount++;
-    const streamData = streamMatch[2];
-    
-    // Skip very large streams that might cause issues
-    if (streamData.length > 100000) {
-      console.log('Skipping large stream to prevent memory issues');
-      continue;
-    }
-    
-    try {
-      // Try to decompress if it's FlateDecode
-      if (streamMatch[1].includes('/FlateDecode')) {
-        console.log('Found FlateDecode stream, attempting decompression...');
-        // For now, we'll parse the raw stream content
-        parseStreamContent(streamData, extractedTexts);
-      } else {
-        // Parse uncompressed stream
-        parseStreamContent(streamData, extractedTexts);
-      }
-    } catch (error) {
-      console.log('Stream parsing failed:', error.message);
-    }
-  }
-  
-  // Method 2: Look for any readable text patterns
-  if (extractedTexts.length === 0) {
-    console.log('No stream text found, searching for readable patterns...');
-    
-    // Enhanced pattern matching for resume content
-    const patterns = [
-      /\b[A-Z][a-z]+\s+[A-Z][a-z]+\b/g,           // Names (First Last)
-      /\b\d{4}\s*[-–]\s*\d{4}\b/g,                 // Year ranges
-      /\b\d{1,2}\/\d{1,2}\/\d{4}\b/g,             // Dates
-      /\b[A-Z][a-z]+\s+\d{4}\b/g,                 // Month Year
-      /\b[A-Z][A-Z\s]{2,}\b/g,                    // Titles/headers
-      /\b\w+@\w+\.\w+\b/g,                        // Email addresses
-      /\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b/g,      // Phone numbers
-      /\b[A-Z][a-z]+(\s+[A-Z][a-z]+)*:\s*/g,      // Section headers
-    ];
-    
-    for (const pattern of patterns) {
-      const matches = pdfContent.match(pattern);
-      if (matches) {
-        extractedTexts.push(...matches);
+  while ((btMatch = btPattern.exec(content)) !== null) {
+    const block = btMatch[1];
+    // Extract text from Tj operations
+    const tjPattern = /\(([^)]*)\)\s*Tj/g;
+    let tjMatch;
+    while ((tjMatch = tjPattern.exec(block)) !== null) {
+      const text = tjMatch[1]
+        .replace(/\\n/g, ' ')
+        .replace(/\\r/g, ' ')
+        .replace(/\\t/g, ' ')
+        .replace(/\\\\/g, '\\')
+        .replace(/\\'/g, "'")
+        .replace(/\\"/g, '"')
+        .trim();
+      
+      if (text.length > 1 && /[a-zA-Z0-9]/.test(text)) {
+        textBlocks.push(text);
       }
     }
   }
   
-  // Method 3: Character-by-character extraction for encoded text
-  if (extractedTexts.length === 0) {
-    console.log('Attempting character-level extraction...');
+  // Also try to extract from TJ array operations
+  const tjArrayPattern = /\[\s*\(([^)]*)\)\s*\]\s*TJ/g;
+  let tjArrayMatch;
+  while ((tjArrayMatch = tjArrayPattern.exec(content)) !== null) {
+    const text = tjArrayMatch[1]
+      .replace(/\\n/g, ' ')
+      .replace(/\\r/g, ' ')
+      .replace(/\\t/g, ' ')
+      .replace(/\\\\/g, '\\')
+      .trim();
     
-    const chars: string[] = [];
-    for (let i = 0; i < uint8Array.length; i++) {
-      const byte = uint8Array[i];
-      // Extract printable ASCII and common extended characters
-      if ((byte >= 32 && byte <= 126) || (byte >= 160 && byte <= 255)) {
-        chars.push(String.fromCharCode(byte));
-      } else if (byte === 10 || byte === 13) {
-        chars.push(' '); // Convert line breaks to spaces
-      }
-    }
-    
-    const text = chars.join('').replace(/\s+/g, ' ').trim();
-    if (text.length > 100) {
-      extractedTexts.push(text);
+    if (text.length > 1 && /[a-zA-Z0-9]/.test(text)) {
+      textBlocks.push(text);
     }
   }
   
-  console.log('Total extracted segments:', extractedTexts.length);
+  // If BT/ET extraction didn't work, try basic pattern matching
+  if (textBlocks.length === 0) {
+    console.log('BT/ET extraction failed, trying basic patterns...');
+    
+    const lines = content.split(/[\r\n]+/);
+    for (const line of lines) {
+      // Look for readable text patterns
+      const cleaned = line
+        .replace(/[^\x20-\x7E]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      
+      // Only keep lines that look like real text
+      if (cleaned.length > 3 && 
+          /[a-zA-Z]/.test(cleaned) && 
+          !cleaned.match(/^(obj|endobj|stream|endstream|xref|trailer|startxref|\/[A-Z])/i)) {
+        textBlocks.push(cleaned);
+      }
+    }
+  }
   
-  if (extractedTexts.length === 0) {
+  console.log('Extracted text blocks:', textBlocks.length);
+  
+  if (textBlocks.length === 0) {
     throw new Error('No readable text found in PDF');
   }
   
-  // Clean and join all extracted text
-  let result = extractedTexts.join(' ')
-    .replace(/\s+/g, ' ')
-    .replace(/[^\x20-\x7E\u00A0-\u00FF]/g, ' ')
+  // Join all text blocks and clean up
+  let result = textBlocks.join(' ')
     .replace(/\s+/g, ' ')
     .trim();
   
@@ -239,37 +222,4 @@ async function extractTextWithDecompression(arrayBuffer: ArrayBuffer): Promise<s
   console.log('Sample text:', result.substring(0, 200));
   
   return result;
-}
-
-function parseStreamContent(streamData: string, extractedTexts: string[]): void {
-  // Look for text operations within the stream
-  const textOperations = [
-    /BT\s*([\s\S]*?)\s*ET/g,
-    /\(([^)]*)\)\s*Tj/g,
-    /\(([^)]*)\)\s*'/g,
-    /\(([^)]*)\)\s*"/g,
-    /\[\s*\(([^)]*)\)\s*\]\s*TJ/g,
-  ];
-  
-  for (const operation of textOperations) {
-    let match;
-    while ((match = operation.exec(streamData)) !== null) {
-      let text = match[1];
-      if (text && text.length > 0) {
-        // Clean the extracted text
-        text = text
-          .replace(/\\n/g, ' ')
-          .replace(/\\r/g, ' ')
-          .replace(/\\t/g, ' ')
-          .replace(/\\\\/g, '\\')
-          .replace(/\\'/g, "'")
-          .replace(/\\"/g, '"')
-          .trim();
-        
-        if (text.length > 1 && /[a-zA-Z0-9]/.test(text)) {
-          extractedTexts.push(text);
-        }
-      }
-    }
-  }
 }

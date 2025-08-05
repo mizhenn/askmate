@@ -98,41 +98,91 @@ export class DocumentProcessor {
   }
 
   private static async extractTextFromPDFClientSide(file: File): Promise<string> {
-    console.log('Starting enhanced client-side PDF extraction...');
+    console.log('Starting PROPER client-side PDF extraction...');
     const arrayBuffer = await file.arrayBuffer();
     const uint8Array = new Uint8Array(arrayBuffer);
+    const decoder = new TextDecoder('utf-8', { fatal: false });
+    const content = decoder.decode(uint8Array);
     
-    // Try different encoding approaches
-    const decoders = [
-      new TextDecoder('utf-8', { fatal: false }),
-      new TextDecoder('latin1', { fatal: false }),
-      new TextDecoder('windows-1252', { fatal: false })
-    ];
+    console.log('PDF content length:', content.length);
     
-    let bestText = '';
-    let bestScore = 0;
+    // Method 1: Extract text from PDF text objects
+    const textBlocks: string[] = [];
     
-    for (const decoder of decoders) {
-      try {
-        const text = decoder.decode(uint8Array);
-        const lines = this.extractReadableLines(text);
-        const score = this.scoreExtractedText(lines.join('\n'));
-        
-        if (score > bestScore) {
-          bestScore = score;
-          bestText = lines.join('\n');
+    // Look for BT...ET text blocks
+    const btPattern = /BT\s*([\s\S]*?)\s*ET/g;
+    let btMatch;
+    
+    while ((btMatch = btPattern.exec(content)) !== null) {
+      const block = btMatch[1];
+      console.log('Found BT block:', block.substring(0, 100));
+      
+      // Extract text from Tj operations
+      const tjPattern = /\(([^)]*)\)\s*Tj/g;
+      let tjMatch;
+      while ((tjMatch = tjPattern.exec(block)) !== null) {
+        const text = this.cleanPdfText(tjMatch[1]);
+        if (text.length > 1 && /[a-zA-Z0-9]/.test(text)) {
+          textBlocks.push(text);
+          console.log('Extracted from Tj:', text);
         }
-      } catch (e) {
-        console.log('Decoder failed:', e);
+      }
+      
+      // Extract from TJ array operations
+      const tjArrayPattern = /\[\s*\(([^)]*)\)\s*\]\s*TJ/g;
+      let tjArrayMatch;
+      while ((tjArrayMatch = tjArrayPattern.exec(block)) !== null) {
+        const text = this.cleanPdfText(tjArrayMatch[1]);
+        if (text.length > 1 && /[a-zA-Z0-9]/.test(text)) {
+          textBlocks.push(text);
+          console.log('Extracted from TJ:', text);
+        }
       }
     }
     
-    if (bestText.length < 50) {
+    console.log(`Extracted ${textBlocks.length} text blocks from BT/ET`);
+    
+    // Method 2: If no text blocks found, try basic extraction
+    if (textBlocks.length === 0) {
+      console.log('No BT/ET blocks found, trying basic extraction...');
+      const lines = content.split(/[\r\n]+/);
+      
+      for (const line of lines.slice(0, 1000)) { // Limit to first 1000 lines
+        const cleaned = line
+          .replace(/[^\x20-\x7E\u00A0-\u00FF]/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+        
+        if (cleaned.length > 3 && 
+            /[a-zA-Z]/.test(cleaned) && 
+            !cleaned.match(/^(obj|endobj|stream|endstream|xref|trailer|startxref|\/[A-Z])/i)) {
+          textBlocks.push(cleaned);
+        }
+      }
+    }
+    
+    if (textBlocks.length === 0) {
       throw new Error('Unable to extract readable text from this PDF. It may be image-based, password-protected, or heavily formatted.');
     }
     
-    console.log(`Client-side extraction successful: ${bestText.length} characters, score: ${bestScore}`);
-    return this.cleanExtractedText(bestText);
+    const result = textBlocks.join(' ').replace(/\s+/g, ' ').trim();
+    console.log(`Final extraction result: ${result.length} characters`);
+    console.log('Sample:', result.substring(0, 200));
+    
+    return result;
+  }
+
+  private static cleanPdfText(text: string): string {
+    return text
+      .replace(/\\n/g, ' ')
+      .replace(/\\r/g, ' ')
+      .replace(/\\t/g, ' ')
+      .replace(/\\\\/g, '\\')
+      .replace(/\\'/g, "'")
+      .replace(/\\"/g, '"')
+      .replace(/\\\(/g, '(')
+      .replace(/\\\)/g, ')')
+      .trim();
   }
 
   private static extractReadableLines(text: string): string[] {
