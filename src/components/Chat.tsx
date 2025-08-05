@@ -120,58 +120,19 @@ export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
   };
 
   const formatAssistantMessage = (content: string) => {
-    const renderTextWithLinks = (text: string) => {
-      // Handle markdown-style links first: [text](url)
-      const markdownLinkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
-      const plainUrlRegex = /(https?:\/\/[^\s]+)/g;
-      
-      // First replace markdown links
-      let processedText = text.replace(markdownLinkRegex, (match, linkText, url) => {
-        return `__MARKDOWN_LINK__${linkText}||${url}__MARKDOWN_LINK__`;
-      });
-      
-      // Then handle plain URLs (that aren't already part of markdown links)
-      const parts = processedText.split(/(https?:\/\/[^\s]+|__MARKDOWN_LINK__[^_]+__MARKDOWN_LINK__)/g);
-      
-      return parts.map((part, index) => {
-        if (part.startsWith('__MARKDOWN_LINK__') && part.endsWith('__MARKDOWN_LINK__')) {
-          const content = part.slice(17, -17); // Remove markers
-          const [linkText, url] = content.split('||');
-          return (
-            <a
-              key={index}
-              href={url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary underline hover:text-primary/80 transition-colors"
-            >
-              {linkText}
-            </a>
-          );
-        } else if (plainUrlRegex.test(part)) {
-          return (
-            <a
-              key={index}
-              href={part}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary underline hover:text-primary/80 transition-colors"
-            >
-              {part}
-            </a>
-          );
-        }
-        return part;
-      });
+    const renderText = (text: string) => {
+      // Remove markdown-style links but keep the text
+      const cleanText = text.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
+      return cleanText;
     };
 
     return content.split('\n').map((line, index) => {
       // Handle headers
       if (line.startsWith('# ')) {
-        return <h2 key={index} className="font-bold text-xl text-foreground mt-4 mb-3">{renderTextWithLinks(line.substring(2))}</h2>;
+        return <h2 key={index} className="font-bold text-xl text-foreground mt-4 mb-3">{renderText(line.substring(2))}</h2>;
       }
       if (line.startsWith('## ')) {
-        return <h3 key={index} className="font-semibold text-lg text-foreground mt-4 mb-2 border-b border-border/30 pb-1">{renderTextWithLinks(line.substring(3))}</h3>;
+        return <h3 key={index} className="font-semibold text-lg text-foreground mt-4 mb-2 border-b border-border/30 pb-1">{renderText(line.substring(3))}</h3>;
       }
       
       // Handle bullet points
@@ -183,8 +144,8 @@ export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
             <div key={index} className="flex items-start gap-2 my-1">
               <span className="text-primary font-medium">•</span>
               <span>
-                <strong className="font-semibold text-foreground">{renderTextWithLinks(boldMatch[1])}</strong>
-                {renderTextWithLinks(boldMatch[2])}
+                <strong className="font-semibold text-foreground">{renderText(boldMatch[1])}</strong>
+                {renderText(boldMatch[2])}
               </span>
             </div>
           );
@@ -192,7 +153,7 @@ export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
         return (
           <div key={index} className="flex items-start gap-2 my-1">
             <span className="text-primary font-medium">•</span>
-            <span>{renderTextWithLinks(content)}</span>
+            <span>{renderText(content)}</span>
           </div>
         );
       }
@@ -204,9 +165,9 @@ export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
           <p key={index} className="my-2">
             {parts.map((part, partIndex) => {
               if (part.startsWith('**') && part.endsWith('**')) {
-                return <strong key={partIndex} className="font-semibold text-foreground">{renderTextWithLinks(part.slice(2, -2))}</strong>;
+                return <strong key={partIndex} className="font-semibold text-foreground">{renderText(part.slice(2, -2))}</strong>;
               }
-              return renderTextWithLinks(part);
+              return renderText(part);
             })}
           </p>
         );
@@ -218,7 +179,7 @@ export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
       }
       
       // Regular text
-      return <p key={index} className="my-1">{renderTextWithLinks(line)}</p>;
+      return <p key={index} className="my-1">{renderText(line)}</p>;
     });
   };
 
