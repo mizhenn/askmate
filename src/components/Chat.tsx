@@ -121,11 +121,34 @@ export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
 
   const formatAssistantMessage = (content: string) => {
     const renderTextWithLinks = (text: string) => {
-      const urlRegex = /(https?:\/\/[^\s]+)/g;
-      const parts = text.split(urlRegex);
+      // Handle markdown-style links first: [text](url)
+      const markdownLinkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
+      const plainUrlRegex = /(https?:\/\/[^\s]+)/g;
+      
+      // First replace markdown links
+      let processedText = text.replace(markdownLinkRegex, (match, linkText, url) => {
+        return `__MARKDOWN_LINK__${linkText}||${url}__MARKDOWN_LINK__`;
+      });
+      
+      // Then handle plain URLs (that aren't already part of markdown links)
+      const parts = processedText.split(/(https?:\/\/[^\s]+|__MARKDOWN_LINK__[^_]+__MARKDOWN_LINK__)/g);
       
       return parts.map((part, index) => {
-        if (urlRegex.test(part)) {
+        if (part.startsWith('__MARKDOWN_LINK__') && part.endsWith('__MARKDOWN_LINK__')) {
+          const content = part.slice(17, -17); // Remove markers
+          const [linkText, url] = content.split('||');
+          return (
+            <a
+              key={index}
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary underline hover:text-primary/80 transition-colors"
+            >
+              {linkText}
+            </a>
+          );
+        } else if (plainUrlRegex.test(part)) {
           return (
             <a
               key={index}
