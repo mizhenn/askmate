@@ -120,13 +120,35 @@ export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
   };
 
   const formatAssistantMessage = (content: string) => {
+    const renderTextWithLinks = (text: string) => {
+      const urlRegex = /(https?:\/\/[^\s]+)/g;
+      const parts = text.split(urlRegex);
+      
+      return parts.map((part, index) => {
+        if (urlRegex.test(part)) {
+          return (
+            <a
+              key={index}
+              href={part}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary underline hover:text-primary/80 transition-colors"
+            >
+              {part}
+            </a>
+          );
+        }
+        return part;
+      });
+    };
+
     return content.split('\n').map((line, index) => {
       // Handle headers
       if (line.startsWith('# ')) {
-        return <h2 key={index} className="font-bold text-xl text-foreground mt-4 mb-3">{line.substring(2)}</h2>;
+        return <h2 key={index} className="font-bold text-xl text-foreground mt-4 mb-3">{renderTextWithLinks(line.substring(2))}</h2>;
       }
       if (line.startsWith('## ')) {
-        return <h3 key={index} className="font-semibold text-lg text-foreground mt-4 mb-2 border-b border-border/30 pb-1">{line.substring(3)}</h3>;
+        return <h3 key={index} className="font-semibold text-lg text-foreground mt-4 mb-2 border-b border-border/30 pb-1">{renderTextWithLinks(line.substring(3))}</h3>;
       }
       
       // Handle bullet points
@@ -138,8 +160,8 @@ export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
             <div key={index} className="flex items-start gap-2 my-1">
               <span className="text-primary font-medium">•</span>
               <span>
-                <strong className="font-semibold text-foreground">{boldMatch[1]}</strong>
-                {boldMatch[2]}
+                <strong className="font-semibold text-foreground">{renderTextWithLinks(boldMatch[1])}</strong>
+                {renderTextWithLinks(boldMatch[2])}
               </span>
             </div>
           );
@@ -147,7 +169,7 @@ export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
         return (
           <div key={index} className="flex items-start gap-2 my-1">
             <span className="text-primary font-medium">•</span>
-            <span>{content}</span>
+            <span>{renderTextWithLinks(content)}</span>
           </div>
         );
       }
@@ -159,9 +181,9 @@ export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
           <p key={index} className="my-2">
             {parts.map((part, partIndex) => {
               if (part.startsWith('**') && part.endsWith('**')) {
-                return <strong key={partIndex} className="font-semibold text-foreground">{part.slice(2, -2)}</strong>;
+                return <strong key={partIndex} className="font-semibold text-foreground">{renderTextWithLinks(part.slice(2, -2))}</strong>;
               }
-              return part;
+              return renderTextWithLinks(part);
             })}
           </p>
         );
@@ -173,7 +195,7 @@ export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
       }
       
       // Regular text
-      return <p key={index} className="my-1">{line}</p>;
+      return <p key={index} className="my-1">{renderTextWithLinks(line)}</p>;
     });
   };
 
