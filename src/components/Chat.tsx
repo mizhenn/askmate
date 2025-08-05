@@ -119,22 +119,54 @@ export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
     }
   };
 
+  const formatAssistantMessage = (content: string): string => {
+    return content
+      // Format bold text with **
+      .replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-foreground">$1</strong>')
+      // Format bullet points
+      .replace(/^•\s(.+)$/gm, '<div class="flex items-start gap-2 my-1"><span class="text-primary font-medium">•</span><span>$1</span></div>')
+      // Format numbered lists
+      .replace(/^(\d+)\.\s(.+)$/gm, '<div class="flex items-start gap-2 my-1"><span class="text-primary font-medium min-w-[1.5rem]">$1.</span><span>$2</span></div>')
+      // Format headers with ##
+      .replace(/^##\s(.+)$/gm, '<h3 class="font-semibold text-lg text-foreground mt-4 mb-2 border-b border-border/30 pb-1">$1</h3>')
+      // Format headers with #
+      .replace(/^#\s(.+)$/gm, '<h2 class="font-bold text-xl text-foreground mt-4 mb-3">$1</h2>')
+      // Format code blocks
+      .replace(/```([\s\S]*?)```/g, '<pre class="bg-muted rounded-lg p-3 my-2 overflow-x-auto border border-border/50"><code class="text-sm">$1</code></pre>')
+      // Format inline code
+      .replace(/`([^`]+)`/g, '<code class="bg-muted px-1.5 py-0.5 rounded text-sm font-mono border border-border/30">$1</code>')
+      // Format line breaks properly
+      .replace(/\n\n/g, '</p><p class="mt-3">')
+      .replace(/\n/g, '<br>')
+      // Wrap in paragraph if not already formatted
+      .replace(/^(?!<[h2-6]|<div|<pre|<ul|<ol)(.+)/, '<p>$1</p>')
+      // Format emojis in a nice way
+      .replace(/(📄|🌐|✅|❌|⚠️|📊|📈|📉|💡|🔍|📋|📝)/g, '<span class="text-base mr-1">$1</span>');
+  };
+
   const generateWelcomeMessage = (content: ProcessedContent): string => {
-    let message = "Hi! I've analyzed your content:\n\n";
+    let message = "# Welcome! 👋\n\nI've successfully analyzed your content:\n\n";
     
     if (content.documents.length > 0) {
-      message += `📄 **Documents (${content.documents.length}):**\n`;
+      message += `## 📄 Documents (${content.documents.length})\n`;
       content.documents.forEach(doc => {
-        message += `• ${doc.name}\n`;
+        message += `• **${doc.name}** - Ready for analysis\n`;
       });
       message += "\n";
     }
 
     if (content.website) {
-      message += `🌐 **Website:** ${content.website.title || content.website.url}\n\n`;
+      message += `## 🌐 Website Content\n`;
+      message += `• **${content.website.title || content.website.url}** - Successfully scraped\n\n`;
     }
 
-    message += "Ask me anything about the content, and I'll provide accurate answers based on what I've analyzed!";
+    message += "## What can I help you with?\n\n";
+    message += "Feel free to ask me anything about the content! I can:\n";
+    message += "• Summarize key points and findings\n";
+    message += "• Answer specific questions about the content\n";
+    message += "• Extract important data, dates, or numbers\n";
+    message += "• Compare information across documents\n\n";
+    message += "Just type your question below to get started! 🚀";
     return message;
   };
 
@@ -303,14 +335,25 @@ export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
               )}
               
               <div
-                className={`max-w-[70%] p-3 rounded-2xl ${
+                className={`max-w-[80%] p-4 rounded-2xl ${
                   message.sender === 'user'
                     ? 'bg-gradient-primary text-primary-foreground'
-                    : 'bg-secondary text-secondary-foreground'
+                    : 'bg-secondary text-secondary-foreground border border-border/50'
                 }`}
               >
-                <p className="text-sm leading-relaxed">{message.content}</p>
-                <p className="text-xs opacity-70 mt-1">
+                {message.sender === 'assistant' ? (
+                  <div className="prose prose-sm max-w-none dark:prose-invert">
+                    <div 
+                      className="text-sm leading-relaxed whitespace-pre-wrap"
+                      dangerouslySetInnerHTML={{
+                        __html: formatAssistantMessage(message.content)
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
+                )}
+                <p className="text-xs opacity-70 mt-2 pt-1 border-t border-current/10">
                   {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </p>
               </div>
