@@ -1,11 +1,20 @@
 import { Button } from "@/components/ui/button";
-import { FileQuestion, Menu, X } from "lucide-react";
-import { toast } from "sonner";
+import { FileQuestion, Menu, X, User, LogOut } from "lucide-react";
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
 import { ThemeToggle } from "./ThemeToggle";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export const Navigation = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const { user, signOut } = useAuth();
+  const navigate = useNavigate();
 
   return (
     <nav className="fixed top-0 w-full bg-background/80 backdrop-blur-md border-b border-border z-50">
@@ -31,25 +40,42 @@ export const Navigation = () => {
               How it works
             </a>
             <ThemeToggle />
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={() => {
-                toast.success("Sign in coming soon!");
-              }}
-            >
-              Sign in
-            </Button>
-            <Button 
-              variant="default" 
-              size="sm"
-              onClick={() => {
-                const uploadSection = document.querySelector('#upload-section');
-                uploadSection?.scrollIntoView({ behavior: 'smooth' });
-              }}
-            >
-              Get started
-            </Button>
+            {user ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <User className="w-4 h-4 mr-2" />
+                    {user.email}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={signOut}>
+                    <LogOut className="w-4 h-4 mr-2" />
+                    Sign out
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => navigate("/auth")}
+                >
+                  Sign in
+                </Button>
+                <Button 
+                  variant="default" 
+                  size="sm"
+                  onClick={() => {
+                    const uploadSection = document.querySelector('#upload-section');
+                    uploadSection?.scrollIntoView({ behavior: 'smooth' });
+                  }}
+                >
+                  Get started
+                </Button>
+              </>
+            )}
           </div>
 
           {/* Mobile menu button */}
@@ -79,29 +105,45 @@ export const Navigation = () => {
               <a href="#how-it-works" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
                 How it works
               </a>
-              <div className="flex flex-col gap-2 pt-2">
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => {
-                    toast.success("Sign in coming soon!");
-                    setIsMenuOpen(false);
-                  }}
-                >
-                  Sign in
-                </Button>
-                <Button 
-                  variant="default" 
-                  size="sm"
-                  onClick={() => {
-                    const uploadSection = document.querySelector('#upload-section');
-                    uploadSection?.scrollIntoView({ behavior: 'smooth' });
-                    setIsMenuOpen(false);
-                  }}
-                >
-                  Get started
-                </Button>
-              </div>
+               <div className="flex flex-col gap-2 pt-2">
+                 {user ? (
+                   <Button 
+                     variant="outline" 
+                     size="sm"
+                     onClick={() => {
+                       signOut();
+                       setIsMenuOpen(false);
+                     }}
+                   >
+                     <LogOut className="w-4 h-4 mr-2" />
+                     Sign out
+                   </Button>
+                 ) : (
+                   <>
+                     <Button 
+                       variant="outline" 
+                       size="sm"
+                       onClick={() => {
+                         navigate("/auth");
+                         setIsMenuOpen(false);
+                       }}
+                     >
+                       Sign in
+                     </Button>
+                     <Button 
+                       variant="default" 
+                       size="sm"
+                       onClick={() => {
+                         const uploadSection = document.querySelector('#upload-section');
+                         uploadSection?.scrollIntoView({ behavior: 'smooth' });
+                         setIsMenuOpen(false);
+                       }}
+                     >
+                       Get started
+                     </Button>
+                   </>
+                 )}
+               </div>
             </div>
           </div>
         )}
