@@ -3,12 +3,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Send, Bot, User, FileText, Link, Sparkles, AlertCircle } from "lucide-react";
+import { Send, Bot, User, FileText, Link, Sparkles, AlertCircle, History, X } from "lucide-react";
 import { toast } from "sonner";
 import { DocumentProcessor } from "@/utils/DocumentProcessor";
 import { WebscrapeService } from "@/utils/WebscrapeService";
 import { AIService } from "@/utils/AIService";
 import { ApiKeyManager } from "./ApiKeyManager";
+import { useAuth } from "@/hooks/useAuth";
+import { useChatHistory } from "@/hooks/useChatHistory";
+import { ChatHistory } from "./ChatHistory";
 
 interface Message {
   id: string;
@@ -28,11 +31,23 @@ interface ProcessedContent {
 }
 
 export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
+  const { user } = useAuth();
+  const {
+    conversations,
+    currentConversation,
+    saveMessage,
+    selectConversation,
+    deleteConversation,
+    startNewConversation,
+    loading: historyLoading
+  } = useChatHistory();
+  
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [processedContent, setProcessedContent] = useState<ProcessedContent>({ documents: [] });
+  const [showHistory, setShowHistory] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -43,10 +58,21 @@ export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
     scrollToBottom();
   }, [messages]);
 
-  // Process documents and website content when component mounts
+  // Load messages from selected conversation
   useEffect(() => {
-    processContent();
-  }, [uploadedFiles, websiteUrl]);
+    if (currentConversation?.messages) {
+      const formattedMessages: Message[] = currentConversation.messages.map(msg => ({
+        id: msg.id,
+        content: msg.content,
+        sender: msg.is_user ? 'user' : 'assistant',
+        timestamp: new Date(msg.created_at)
+      }));
+      setMessages(formattedMessages);
+    } else {
+      // Process documents and website content when starting new conversation
+      processContent();
+    }
+  }, [currentConversation, uploadedFiles, websiteUrl]);
 
   const processContent = async () => {
     console.log('processContent called with:', { uploadedFiles: uploadedFiles.length, websiteUrl });
@@ -101,15 +127,17 @@ export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
       setProcessedContent(processed);
       console.log('Final processed content:', processed);
 
-      // Generate welcome message based on processed content
-      const welcomeContent = generateWelcomeMessage(processed);
-      const welcomeMessage: Message = {
-        id: "welcome",
-        content: welcomeContent,
-        sender: 'assistant',
-        timestamp: new Date()
-      };
-      setMessages([welcomeMessage]);
+      // Generate welcome message based on processed content only for new conversations
+      if (!currentConversation) {
+        const welcomeContent = generateWelcomeMessage(processed);
+        const welcomeMessage: Message = {
+          id: "welcome",
+          content: welcomeContent,
+          sender: 'assistant',
+          timestamp: new Date()
+        };
+        setMessages([welcomeMessage]);
+      }
 
     } catch (error) {
       console.error('Error processing content:', error);
@@ -212,6 +240,11 @@ export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
   const handleSendMessage = async () => {
     if (!inputValue.trim()) return;
 
+    // Check if user is authenticated
+    if (!user) {
+      toast.error("Please sign in to start chatting");
+      return;
+    }
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -223,6 +256,9 @@ export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
     setMessages(prev => [...prev, userMessage]);
     setInputValue("");
     setIsLoading(true);
+
+    // Save user message to database
+    await saveMessage(userMessage.content, true, currentConversation?.id);
 
     try {
       // Combine all processed content for context
@@ -257,6 +293,9 @@ export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
           timestamp: new Date()
         };
         setMessages(prev => [...prev, aiResponse]);
+        
+        // Save AI message to database
+        await saveMessage(aiResponse.content, false, currentConversation?.id);
       } else {
         throw new Error(result.error || 'Failed to get AI response');
       }
@@ -275,7 +314,6 @@ export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
     }
   };
 
-
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -291,7 +329,7 @@ export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
   ];
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="max-w-7xl mx-auto">
       {/* API Key Manager */}
       {!WebscrapeService.hasApiKey() && websiteUrl && (
         <Card className="p-4 mb-6 bg-amber-50 border-amber-200">
@@ -325,150 +363,208 @@ export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
         </Card>
       )}
 
-      {/* Chat Header */}
-      <Card className="p-6 mb-6 bg-gradient-subtle border-primary/20">
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 bg-gradient-primary rounded-2xl flex items-center justify-center">
-            <Sparkles className="w-6 h-6 text-white" />
-          </div>
-          <div className="flex-1">
-            <h3 className="text-lg font-semibold text-foreground font-heading">AskMate AI Assistant</h3>
-            <p className="text-sm text-muted-foreground">
-              Ask questions about your {uploadedFiles.length > 0 && `${uploadedFiles.length} uploaded file(s)`}
-              {uploadedFiles.length > 0 && websiteUrl && ' and '}
-              {websiteUrl && 'website content'}
-            </p>
-          </div>
-          <div className="flex gap-2">
-            {websiteUrl && <ApiKeyManager />}
-            {processedContent.documents.length > 0 && (
-              <div className="flex items-center gap-1 px-3 py-1 bg-primary/10 rounded-full">
-                <FileText className="w-3 h-3 text-primary" />
-                <span className="text-xs text-primary font-medium">{processedContent.documents.length} docs</span>
-              </div>
-            )}
-            {processedContent.website && (
-              <div className="flex items-center gap-1 px-3 py-1 bg-primary/10 rounded-full">
-                <Link className="w-3 h-3 text-primary" />
-                <span className="text-xs text-primary font-medium">Website</span>
-              </div>
-            )}
-          </div>
-        </div>
-      </Card>
-
-      {/* Messages Container */}
-      <Card className="mb-6 border-border">
-        <div className="h-96 overflow-y-auto p-6 space-y-4">
-          {messages.map((message) => (
-            <div
-              key={message.id}
-              className={`flex gap-3 ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}
-            >
-              {message.sender === 'assistant' && (
-                <Avatar className="w-8 h-8 bg-primary/10">
-                  <AvatarFallback className="bg-primary/10">
-                    <Bot className="w-4 h-4 text-primary" />
-                  </AvatarFallback>
-                </Avatar>
-              )}
-              
-              <div
-                className={`max-w-[80%] p-4 rounded-2xl ${
-                  message.sender === 'user'
-                    ? 'bg-gradient-primary text-primary-foreground'
-                    : 'bg-secondary text-secondary-foreground border border-border/50'
-                }`}
-              >
-                {message.sender === 'assistant' ? (
-                  <div className="prose prose-sm max-w-none dark:prose-invert">
-                    <div className="text-sm leading-relaxed whitespace-pre-wrap space-y-2">
-                      {formatAssistantMessage(message.content)}
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
-                )}
-                <p className="text-xs opacity-70 mt-2 pt-1 border-t border-current/10">
-                  {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </p>
-              </div>
-
-              {message.sender === 'user' && (
-                <Avatar className="w-8 h-8 bg-muted">
-                  <AvatarFallback className="bg-muted">
-                    <User className="w-4 h-4 text-muted-foreground" />
-                  </AvatarFallback>
-                </Avatar>
-              )}
-            </div>
-          ))}
-
-          {isLoading && (
-            <div className="flex gap-3 justify-start">
-              <Avatar className="w-8 h-8 bg-primary/10">
-                <AvatarFallback className="bg-primary/10">
-                  <Bot className="w-4 h-4 text-primary" />
-                </AvatarFallback>
-              </Avatar>
-              <div className="bg-secondary p-3 rounded-2xl">
-                <div className="flex gap-1">
-                  <div className="w-2 h-2 bg-muted-foreground rounded-full animate-pulse"></div>
-                  <div className="w-2 h-2 bg-muted-foreground rounded-full animate-pulse delay-100"></div>
-                  <div className="w-2 h-2 bg-muted-foreground rounded-full animate-pulse delay-200"></div>
-                </div>
-              </div>
-            </div>
-          )}
-          
-          <div ref={messagesEndRef} />
-        </div>
-      </Card>
-
-      {/* Suggested Questions */}
-      {messages.length === 1 && (
-        <Card className="p-4 mb-6 bg-muted/30">
-          <p className="text-sm font-medium text-foreground mb-3">Try asking:</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {suggestedQuestions.map((question, index) => (
-              <Button
-                key={index}
-                variant="ghost"
-                size="sm"
-                className="justify-start text-left h-auto p-2 text-muted-foreground hover:text-foreground"
-                onClick={() => setInputValue(question)}
-              >
-                {question}
-              </Button>
-            ))}
-          </div>
-        </Card>
-      )}
-
-      {/* Chat Input */}
-      <Card className="p-4">
-        <div className="flex gap-3">
-          <Input
-            placeholder="Ask your AI mate about your document or website..."
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            onKeyPress={handleKeyPress}
-            className="flex-1"
-            disabled={isLoading}
-          />
+      {/* Chat History Integration */}
+      {user && (
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-bold text-foreground font-heading">Chat with AskMate</h2>
           <Button
-            onClick={handleSendMessage}
-            disabled={!inputValue.trim() || isLoading}
+            variant="outline"
             size="sm"
-            className="px-4"
+            onClick={() => setShowHistory(!showHistory)}
+            className="flex items-center gap-2"
           >
-            <Send className="w-4 h-4" />
+            {showHistory ? <X className="w-4 h-4" /> : <History className="w-4 h-4" />}
+            {showHistory ? 'Close' : 'History'}
           </Button>
         </div>
-        <p className="text-xs text-muted-foreground mt-2">
-          Press Enter to send, Shift+Enter for new line
-        </p>
-      </Card>
+      )}
+
+      {/* Layout with history sidebar */}
+      <div className="flex gap-6">
+        {/* Chat History Sidebar */}
+        {user && showHistory && (
+          <div className="w-80 flex-shrink-0 hidden lg:block">
+            <ChatHistory
+              conversations={conversations}
+              currentConversation={currentConversation}
+              onSelectConversation={selectConversation}
+              onDeleteConversation={deleteConversation}
+              onStartNewConversation={startNewConversation}
+              loading={historyLoading}
+              isOpen={true}
+              onClose={() => setShowHistory(false)}
+            />
+          </div>
+        )}
+
+        {/* Mobile Chat History */}
+        {user && showHistory && (
+          <ChatHistory
+            conversations={conversations}
+            currentConversation={currentConversation}
+            onSelectConversation={selectConversation}
+            onDeleteConversation={deleteConversation}
+            onStartNewConversation={startNewConversation}
+            loading={historyLoading}
+            isOpen={showHistory}
+            onClose={() => setShowHistory(false)}
+          />
+        )}
+
+        {/* Main Chat Area */}
+        <div className="flex-1">
+          {/* Chat Header */}
+          <Card className="p-6 mb-6 bg-gradient-subtle border-primary/20">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-gradient-primary rounded-2xl flex items-center justify-center">
+                <Sparkles className="w-6 h-6 text-white" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-foreground font-heading">AskMate AI Assistant</h3>
+                <p className="text-sm text-muted-foreground">
+                  Ask questions about your {uploadedFiles.length > 0 && `${uploadedFiles.length} uploaded file(s)`}
+                  {uploadedFiles.length > 0 && websiteUrl && ' and '}
+                  {websiteUrl && 'website content'}
+                  {!uploadedFiles.length && !websiteUrl && 'documents or websites'}
+                </p>
+                {currentConversation && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Current conversation: {currentConversation.title}
+                  </p>
+                )}
+              </div>
+              <div className="flex gap-2">
+                {websiteUrl && <ApiKeyManager />}
+                {processedContent.documents.length > 0 && (
+                  <div className="flex items-center gap-1 px-3 py-1 bg-primary/10 rounded-full">
+                    <FileText className="w-3 h-3 text-primary" />
+                    <span className="text-xs text-primary font-medium">{processedContent.documents.length} docs</span>
+                  </div>
+                )}
+                {processedContent.website && (
+                  <div className="flex items-center gap-1 px-3 py-1 bg-primary/10 rounded-full">
+                    <Link className="w-3 h-3 text-primary" />
+                    <span className="text-xs text-primary font-medium">Website</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </Card>
+
+          {/* Messages Container */}
+          <Card className="mb-6 border-border">
+            <div className="h-96 overflow-y-auto p-6 space-y-4">
+              {messages.map((message) => (
+                <div
+                  key={message.id}
+                  className={`flex gap-3 ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}
+                >
+                  {message.sender === 'assistant' && (
+                    <Avatar className="w-8 h-8 bg-primary/10">
+                      <AvatarFallback className="bg-primary/10">
+                        <Bot className="w-4 h-4 text-primary" />
+                      </AvatarFallback>
+                    </Avatar>
+                  )}
+                  
+                  <div
+                    className={`max-w-[80%] p-4 rounded-2xl ${
+                      message.sender === 'user'
+                        ? 'bg-gradient-primary text-primary-foreground'
+                        : 'bg-secondary text-secondary-foreground border border-border/50'
+                    }`}
+                  >
+                    {message.sender === 'assistant' ? (
+                      <div className="prose prose-sm max-w-none dark:prose-invert">
+                        <div className="text-sm leading-relaxed whitespace-pre-wrap space-y-2">
+                          {formatAssistantMessage(message.content)}
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
+                    )}
+                    <p className="text-xs opacity-70 mt-2 pt-1 border-t border-current/10">
+                      {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  </div>
+
+                  {message.sender === 'user' && (
+                    <Avatar className="w-8 h-8 bg-muted">
+                      <AvatarFallback className="bg-muted">
+                        <User className="w-4 h-4 text-muted-foreground" />
+                      </AvatarFallback>
+                    </Avatar>
+                  )}
+                </div>
+              ))}
+
+              {isLoading && (
+                <div className="flex gap-3 justify-start">
+                  <Avatar className="w-8 h-8 bg-primary/10">
+                    <AvatarFallback className="bg-primary/10">
+                      <Bot className="w-4 h-4 text-primary" />
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="bg-secondary p-3 rounded-2xl">
+                    <div className="flex gap-1">
+                      <div className="w-2 h-2 bg-muted-foreground rounded-full animate-pulse"></div>
+                      <div className="w-2 h-2 bg-muted-foreground rounded-full animate-pulse delay-100"></div>
+                      <div className="w-2 h-2 bg-muted-foreground rounded-full animate-pulse delay-200"></div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              <div ref={messagesEndRef} />
+            </div>
+          </Card>
+
+          {/* Suggested Questions */}
+          {messages.length === 1 && (
+            <Card className="p-4 mb-6 bg-muted/30">
+              <p className="text-sm font-medium text-foreground mb-3">Try asking:</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {suggestedQuestions.map((question, index) => (
+                  <Button
+                    key={index}
+                    variant="ghost"
+                    size="sm"
+                    className="justify-start text-left h-auto p-2 text-muted-foreground hover:text-foreground"
+                    onClick={() => setInputValue(question)}
+                  >
+                    {question}
+                  </Button>
+                ))}
+              </div>
+            </Card>
+          )}
+
+          {/* Chat Input */}
+          <Card className="p-4">
+            <div className="flex gap-3">
+              <Input
+                placeholder="Ask your AI mate about your document or website..."
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyPress={handleKeyPress}
+                className="flex-1"
+                disabled={isLoading || !user}
+              />
+              <Button
+                onClick={handleSendMessage}
+                disabled={!inputValue.trim() || isLoading || !user}
+                size="sm"
+                className="px-4"
+              >
+                <Send className="w-4 h-4" />
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              {user ? "Press Enter to send, Shift+Enter for new line" : "Please sign in to start chatting"}
+            </p>
+          </Card>
+        </div>
+      </div>
     </div>
   );
 };
