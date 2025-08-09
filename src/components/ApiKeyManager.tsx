@@ -5,9 +5,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Key, Check } from "lucide-react";
 import { toast } from "sonner";
 
+const isLocalMode = import.meta.env.VITE_APP_MODE === 'local';
+
 export const ApiKeyManager = () => {
   const handleConfigureKeys = () => {
-    toast.info("API keys are now securely managed through Supabase Edge Function secrets!");
+    if (isLocalMode) {
+      toast.info("Running in local mode. Check your .env.local file for API key configuration.");
+    } else {
+      toast.info("API keys are securely managed through Supabase Edge Function secrets!");
+    }
   };
 
   return (
@@ -31,11 +37,16 @@ export const ApiKeyManager = () => {
                 <h4 className="font-semibold text-foreground">OpenAI API Key</h4>
                 <div className="flex items-center gap-1 text-green-600">
                   <Check className="w-4 h-4" />
-                  <span className="text-xs">Configured via Supabase</span>
+                  <span className="text-xs">
+                    {isLocalMode ? "Local Environment" : "Configured via Supabase"}
+                  </span>
                 </div>
               </div>
               <p className="text-xs text-muted-foreground">
-                ✅ OpenAI integration is securely configured through Supabase Edge Functions
+                {isLocalMode 
+                  ? "✅ Set VITE_OPENAI_API_KEY in your .env.local file"
+                  : "✅ OpenAI integration is securely configured through Supabase Edge Functions"
+                }
               </p>
             </div>
           </Card>
@@ -47,19 +58,34 @@ export const ApiKeyManager = () => {
                 <h4 className="font-semibold text-foreground">Firecrawl API Key</h4>
                 <div className="flex items-center gap-1 text-green-600">
                   <Check className="w-4 h-4" />
-                  <span className="text-xs">Configured via Supabase</span>
+                  <span className="text-xs">
+                    {isLocalMode ? "Local Environment" : "Configured via Supabase"}
+                  </span>
                 </div>
               </div>
               <p className="text-xs text-muted-foreground">
-                ✅ Firecrawl integration is securely configured through Supabase Edge Functions
+                {isLocalMode 
+                  ? "✅ Set VITE_FIRECRAWL_API_KEY in your .env.local file"
+                  : "✅ Firecrawl integration is securely configured through Supabase Edge Functions"
+                }
               </p>
             </div>
           </Card>
 
           <div className="text-xs text-muted-foreground space-y-1">
-            <p>• All API keys are securely stored in Supabase Edge Function secrets</p>
-            <p>• No sensitive information is stored in your browser</p>
-            <p>• Both document analysis and website scraping are fully operational</p>
+            {isLocalMode ? (
+              <>
+                <p>• Running in local development mode</p>
+                <p>• API keys are read from .env.local file</p>
+                <p>• Copy .env.example to .env.local and add your keys</p>
+              </>
+            ) : (
+              <>
+                <p>• All API keys are securely stored in Supabase Edge Function secrets</p>
+                <p>• No sensitive information is stored in your browser</p>
+                <p>• Both document analysis and website scraping are fully operational</p>
+              </>
+            )}
           </div>
         </div>
       </DialogContent>
