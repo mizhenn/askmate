@@ -2,7 +2,7 @@
 
 AskMate is an intelligent document analysis and website scraping tool that lets you upload documents or enter website URLs, then ask questions to get AI-powered insights. With persistent chat history and seamless authentication, it's your personal AI research assistant.
 
-![AskMate Demo](https://via.placeholder.com/800x400/1a1a1a/ffffff?text=AskMate+AI+Assistant)
+
 
 ## ✨ Features
 
