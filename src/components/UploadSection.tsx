@@ -109,22 +109,28 @@ export const UploadSection = () => {
 
               <Button 
                 variant="outline" 
-                onClick={() => fileInputRef.current?.click()}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  fileInputRef.current?.click();
+                }}
                 className="mt-4"
+                type="button"
               >
                 Choose Files
               </Button>
-              
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                accept=".pdf,.doc,.docx,.txt"
-                onChange={handleFileSelect}
-                className="hidden"
-              />
             </div>
           </Card>
+          
+          {/* Hidden file input - placed outside the drag area */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept=".pdf,.doc,.docx,.txt"
+            onChange={handleFileSelect}
+            className="hidden"
+          />
 
           {/* Uploaded Files */}
           {uploadedFiles.length > 0 && (
