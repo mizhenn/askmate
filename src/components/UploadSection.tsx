@@ -46,10 +46,19 @@ export const UploadSection = () => {
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    console.log('File input changed:', e.target.files);
     const files = Array.from(e.target.files || []);
     setUploadedFiles(prev => [...prev, ...files]);
     if (files.length > 0) {
       toast.success(`${files.length} file(s) uploaded successfully!`);
+    }
+  };
+
+  const handleChooseFiles = () => {
+    console.log('Choose files clicked');
+    console.log('File input ref:', fileInputRef.current);
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
     }
   };
 
@@ -109,11 +118,7 @@ export const UploadSection = () => {
 
               <Button 
                 variant="outline" 
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  fileInputRef.current?.click();
-                }}
+                onClick={handleChooseFiles}
                 className="mt-4"
                 type="button"
               >
