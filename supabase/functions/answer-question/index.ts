@@ -67,7 +67,7 @@ Please provide a thorough, accurate answer based on the content above. If you fi
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',  // Using mini model to reduce token usage and costs
+        model: 'gpt-4.1-2025-04-14',  // Using mini model to reduce token usage and costs
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
