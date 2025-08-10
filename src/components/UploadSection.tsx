@@ -46,7 +46,6 @@ export const UploadSection = () => {
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    console.log('File input changed:', e.target.files);
     const files = Array.from(e.target.files || []);
     setUploadedFiles(prev => [...prev, ...files]);
     if (files.length > 0) {
@@ -55,8 +54,6 @@ export const UploadSection = () => {
   };
 
   const handleChooseFiles = () => {
-    console.log('Choose files clicked');
-    console.log('File input ref:', fileInputRef.current);
     if (fileInputRef.current) {
       fileInputRef.current.click();
     }

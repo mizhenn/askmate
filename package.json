@@ -8,7 +8,10 @@
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "deno:version": "npx deno --version",
+    "deno:lint": "npx deno lint supabase/functions",
+    "deno:fmt": "npx deno fmt supabase/functions"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
@@ -50,6 +53,7 @@
     "lucide-react": "^0.462.0",
     "mammoth": "^1.9.1",
     "next-themes": "^0.3.0",
+    "pdfjs-dist": "^5.4.54",
     "react": "^18.3.1",
     "react-day-picker": "^8.10.1",
     "react-dom": "^18.3.1",
@@ -67,10 +71,12 @@
     "@eslint/js": "^9.9.0",
     "@tailwindcss/typography": "^0.5.15",
     "@types/node": "^22.5.5",
+    "@types/pdfjs-dist": "^2.10.378",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react-swc": "^3.5.0",
     "autoprefixer": "^10.4.20",
+    "deno-bin": "^2.2.7",
     "eslint": "^9.9.0",
     "eslint-plugin-react-hooks": "^5.1.0-rc.0",
     "eslint-plugin-react-refresh": "^0.4.9",

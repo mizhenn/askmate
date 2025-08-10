@@ -1,23 +1,44 @@
-// @ts-ignore  
+/* eslint-disable @typescript-eslint/ban-ts-comment */
+// @ts-ignore
 import * as mammoth from 'mammoth';
+import * as pdfjsLib from 'pdfjs-dist';
+import type { TextItem } from 'pdfjs-dist/types/src/display/api';
+ // Vite-friendly worker URL for PDF.js (resolves to a URL string at build time)
+ // @ts-ignore - This import relies on Vite's ?url handling
+ import workerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+
+// Configure PDF.js worker to use the bundled version to avoid mismatches
+if (typeof window !== 'undefined' && (pdfjsLib as any).GlobalWorkerOptions) {
+  (pdfjsLib as any).GlobalWorkerOptions.workerSrc = workerSrc as unknown as string;
+}
 
 export class DocumentProcessor {
   static async extractTextFromFile(file: File): Promise<string> {
     const fileType = file.type || this.getFileTypeFromName(file.name);
     
+    // DIAGNOSTIC LOGS
     try {
+      let extractedText = '';
       switch (fileType) {
         case 'application/pdf':
-          return this.extractTextFromPDF(file);
+          extractedText = await this.extractTextFromPDF(file);
+          break;
         case 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
-          return this.extractTextFromDOCX(file);
+          extractedText = await this.extractTextFromDOCX(file);
+          break;
         case 'text/plain':
-          return this.extractTextFromTXT(file);
+          extractedText = await this.extractTextFromTXT(file);
+          break;
         default:
           throw new Error(`Unsupported file type: ${fileType}`);
       }
+      
+      if (extractedText.length < 10) {
+        }
+      
+      return extractedText;
     } catch (error) {
-      console.error('Error extracting text from file:', error);
+      console.error('❌ Error extracting text from file:', error);
       throw error;
     }
   }
@@ -38,47 +59,94 @@ export class DocumentProcessor {
 
   private static async extractTextFromPDF(file: File): Promise<string> {
     try {
-      console.log(`Starting PDF extraction for: ${file.name}, size: ${file.size} bytes`);
+      // Check if we're in local mode - skip Supabase function call
+      const isLocalMode = import.meta.env.VITE_APP_MODE === 'local';
       
-      // Try Edge Function first for reliable PDF text extraction
-      try {
-        const formData = new FormData();
-        formData.append('file', file);
+      if (!isLocalMode) {
+        // Try Edge Function first for reliable PDF text extraction (production only)
+        try {
+          const formData = new FormData();
+          formData.append('file', file);
 
-        console.log('Attempting Edge Function extraction...');
-        const response = await fetch('https://ncpifmvfijbtecwwymou.supabase.co/functions/v1/extract-pdf-text', {
-          method: 'POST',
-          body: formData,
-        });
+          const response = await fetch('https://ncpifmvfijbtecwwymou.supabase.co/functions/v1/extract-pdf-text', {
+            method: 'POST',
+            body: formData,
+          });
 
-        if (response.ok) {
-          const result = await response.json();
-          console.log('Edge Function response:', result);
-          
-          if (result.success && result.text && result.text.length > 20) {
-            console.log('PDF processed successfully via Edge Function');
-            const cleanText = this.cleanExtractedText(result.text);
-            console.log(`Clean text length: ${cleanText.length}, preview: ${cleanText.substring(0, 200)}`);
-            return cleanText;
+          if (response.ok) {
+            const result = await response.json();
+            if (result.success && result.text && result.text.length > 20) {
+              const cleanText = this.cleanExtractedText(result.text);
+              return cleanText;
+            } else {
+              }
           } else {
-            console.log('Edge Function returned insufficient text:', result);
+            const errorText = await response.text();
+            }
+        } catch (edgeFunctionError) {
           }
-        } else {
-          const errorText = await response.text();
-          console.log('Edge Function failed with status:', response.status, errorText);
+      } else {
         }
-      } catch (edgeFunctionError) {
-        console.log('Edge Function failed:', edgeFunctionError);
+      
+      // Try PDF.js extraction first (works in both local and production when worker is configured)
+      try {
+        const pdfText = await this.extractTextWithPDFJS(file);
+        if (pdfText && pdfText.length > 50) {
+          return pdfText;
+        }
+      } catch (pdfJsError) {
+        }
+      
+      // Use enhanced client-side extraction for local mode or as fallback
+      const extractedText = await this.extractTextFromPDFClientSide(file);
+      
+      // If extraction still returns garbled text, try a simple text-only approach
+      if (extractedText.length < 100 || !this.isReadableText(extractedText)) {
+        return await this.extractSimpleTextFromPDF(file);
       }
       
-      // Fallback to enhanced client-side extraction
-      console.log('Trying enhanced client-side extraction...');
-      return await this.extractTextFromPDFClientSide(file);
+      return extractedText;
       
     } catch (error) {
       console.error('Error extracting PDF text:', error);
       throw new Error("Unable to extract text from this PDF. The document may be image-based, encrypted, or corrupted. Please try converting it to a Word document (.docx) or text file (.txt) for better results.");
     }
+  }
+
+  private static async extractTextWithPDFJS(file: File): Promise<string> {
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    
+    const textContent: string[] = [];
+    
+    // Extract text from each page
+    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+      try {
+        const page = await pdf.getPage(pageNum);
+        const textContentObj = await page.getTextContent();
+        
+        // Combine all text items from the page
+        const pageText = textContentObj.items
+          .map((item: any) => {
+            // Handle both string items and objects with 'str' property
+            return typeof item === 'string' ? item : (item.str || '');
+          })
+          .filter((text: string) => text.trim().length > 0)
+          .join(' ');
+        
+        if (pageText.trim()) {
+          textContent.push(pageText.trim());
+          }
+      } catch (pageError) {
+        }
+    }
+    
+    if (textContent.length === 0) {
+      throw new Error('No text content found in PDF pages');
+    }
+    
+    const fullText = textContent.join('\n\n').trim();
+    return fullText;
   }
 
   private static cleanExtractedText(text: string): string {
@@ -98,76 +166,122 @@ export class DocumentProcessor {
   }
 
   private static async extractTextFromPDFClientSide(file: File): Promise<string> {
-    console.log('Starting PROPER client-side PDF extraction...');
     const arrayBuffer = await file.arrayBuffer();
     const uint8Array = new Uint8Array(arrayBuffer);
+    
+    // Check if this is actually a PDF file
+    const pdfHeader = String.fromCharCode(...uint8Array.slice(0, 4));
+    if (pdfHeader !== '%PDF') {
+      throw new Error('Invalid PDF file - missing PDF header');
+    }
+    
     const decoder = new TextDecoder('utf-8', { fatal: false });
     const content = decoder.decode(uint8Array);
     
-    console.log('PDF content length:', content.length);
-    
-    // Method 1: Extract text from PDF text objects
     const textBlocks: string[] = [];
     
-    // Look for BT...ET text blocks
-    const btPattern = /BT\s*([\s\S]*?)\s*ET/g;
+    // Method 1: Extract text from PDF text objects (BT...ET blocks)
+    const btPattern = /BT\s+([\s\S]*?)\s+ET/g;
     let btMatch;
     
     while ((btMatch = btPattern.exec(content)) !== null) {
       const block = btMatch[1];
-      console.log('Found BT block:', block.substring(0, 100));
       
-      // Extract text from Tj operations
-      const tjPattern = /\(([^)]*)\)\s*Tj/g;
+      // Extract text from Tj operations: (text) Tj
+      const tjPattern = /\(([^)\\]*(?:\\.[^)\\]*)*)\)\s*Tj/g;
       let tjMatch;
       while ((tjMatch = tjPattern.exec(block)) !== null) {
         const text = this.cleanPdfText(tjMatch[1]);
-        if (text.length > 1 && /[a-zA-Z0-9]/.test(text)) {
+        if (text.length > 0 && /[a-zA-Z0-9]/.test(text)) {
           textBlocks.push(text);
-          console.log('Extracted from Tj:', text);
         }
       }
       
-      // Extract from TJ array operations
-      const tjArrayPattern = /\[\s*\(([^)]*)\)\s*\]\s*TJ/g;
+      // Extract from TJ array operations: [(text)] TJ
+      const tjArrayPattern = /\[\s*\(([^)\\]*(?:\\.[^)\\]*)*)\)\s*\]\s*TJ/g;
       let tjArrayMatch;
       while ((tjArrayMatch = tjArrayPattern.exec(block)) !== null) {
         const text = this.cleanPdfText(tjArrayMatch[1]);
-        if (text.length > 1 && /[a-zA-Z0-9]/.test(text)) {
+        if (text.length > 0 && /[a-zA-Z0-9]/.test(text)) {
           textBlocks.push(text);
-          console.log('Extracted from TJ:', text);
+        }
+      }
+      
+      // Extract from complex TJ arrays: [(text1) num (text2) num ...] TJ
+      const complexTjPattern = /\[\s*((?:\([^)\\]*(?:\\.[^)\\]*)*\)\s*(?:-?\d+(?:\.\d+)?\s*)?)+)\]\s*TJ/g;
+      let complexMatch;
+      while ((complexMatch = complexTjPattern.exec(block)) !== null) {
+        const arrayContent = complexMatch[1];
+        const textInArrayPattern = /\(([^)\\]*(?:\\.[^)\\]*)*)\)/g;
+        let textMatch;
+        while ((textMatch = textInArrayPattern.exec(arrayContent)) !== null) {
+          const text = this.cleanPdfText(textMatch[1]);
+          if (text.length > 0 && /[a-zA-Z0-9]/.test(text)) {
+            textBlocks.push(text);
+          }
         }
       }
     }
     
-    console.log(`Extracted ${textBlocks.length} text blocks from BT/ET`);
-    
-    // Method 2: If no text blocks found, try basic extraction
+    // Method 2: If no text blocks found, try stream content extraction
     if (textBlocks.length === 0) {
-      console.log('No BT/ET blocks found, trying basic extraction...');
-      const lines = content.split(/[\r\n]+/);
+      // Look for stream objects that might contain text
+      const streamPattern = /stream\s+([\s\S]*?)\s+endstream/g;
+      let streamMatch;
       
-      for (const line of lines.slice(0, 1000)) { // Limit to first 1000 lines
-        const cleaned = line
-          .replace(/[^\x20-\x7E\u00A0-\u00FF]/g, ' ')
+      while ((streamMatch = streamPattern.exec(content)) !== null) {
+        const streamContent = streamMatch[1];
+        
+        // Try to find readable text in streams
+        const readableText = streamContent
+          .replace(/[^\x20-\x7E\n\r\t]/g, ' ') // Keep only printable ASCII + whitespace
           .replace(/\s+/g, ' ')
           .trim();
         
-        if (cleaned.length > 3 && 
-            /[a-zA-Z]/.test(cleaned) && 
-            !cleaned.match(/^(obj|endobj|stream|endstream|xref|trailer|startxref|\/[A-Z])/i)) {
-          textBlocks.push(cleaned);
+        if (readableText.length > 10 && /[a-zA-Z]{3,}/.test(readableText)) {
+          // Split into words and filter meaningful ones
+          const words = readableText.split(/\s+/).filter(word =>
+            word.length > 2 &&
+            /^[a-zA-Z0-9.,!?;:'"()-]+$/.test(word) &&
+            !word.match(/^(obj|endobj|stream|endstream|xref|trailer|startxref)$/i)
+          );
+          
+          if (words.length > 5) {
+            textBlocks.push(words.join(' '));
+          }
+        }
+      }
+    }
+    
+    // Method 3: Last resort - scan for any readable text patterns
+    if (textBlocks.length === 0) {
+      // Look for sequences of readable characters
+      const readablePattern = /[a-zA-Z][a-zA-Z0-9\s.,!?;:'"()-]{10,}/g;
+      let patternMatch;
+      
+      while ((patternMatch = readablePattern.exec(content)) !== null) {
+        const text = patternMatch[0].trim();
+        if (text.length > 15 &&
+            !text.match(/^(obj|endobj|stream|endstream|xref|trailer|startxref)/i) &&
+            text.split(/\s+/).length > 3) {
+          textBlocks.push(text);
         }
       }
     }
     
     if (textBlocks.length === 0) {
-      throw new Error('Unable to extract readable text from this PDF. It may be image-based, password-protected, or heavily formatted.');
+      throw new Error('Unable to extract readable text from this PDF. The document may be:\n• Image-based (scanned document)\n• Password-protected\n• Heavily formatted with complex layouts\n• Corrupted\n\nTry converting it to a Word document (.docx) or text file (.txt) for better results.');
     }
     
-    const result = textBlocks.join(' ').replace(/\s+/g, ' ').trim();
-    console.log(`Final extraction result: ${result.length} characters`);
-    console.log('Sample:', result.substring(0, 200));
+    // Join and clean up the result
+    const result = textBlocks
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    
+    if (result.length < 50) {
+      throw new Error('Extracted text is too short. The PDF may not contain readable text content.');
+    }
     
     return result;
   }
@@ -182,7 +296,40 @@ export class DocumentProcessor {
       .replace(/\\"/g, '"')
       .replace(/\\\(/g, '(')
       .replace(/\\\)/g, ')')
+      .replace(/\\([0-9a-fA-F]{3})/g, (match, octal) => {
+        // Convert octal escape sequences to characters
+        return String.fromCharCode(parseInt(octal, 8));
+      })
       .trim();
+  }
+
+  private static isReadableText(text: string): boolean {
+    // Check if text contains mostly readable characters
+    const readableChars = text.match(/[a-zA-Z0-9\s.,!?;:'"()-]/g) || [];
+    const readableRatio = readableChars.length / text.length;
+    return readableRatio > 0.7; // At least 70% readable characters
+  }
+
+  private static async extractSimpleTextFromPDF(file: File): Promise<string> {
+    // For local development, return a message indicating manual conversion is needed
+    const message = `Unable to extract text from this PDF file automatically.
+
+The PDF appears to be:
+• Image-based (scanned document)
+• Using complex encoding
+• Password-protected
+• Or heavily formatted
+
+For best results, please:
+1. Convert the PDF to a Word document (.docx) using an online converter
+2. Or save it as a plain text file (.txt)
+3. Then upload the converted file
+
+Alternatively, you can try:
+• Using a different PDF file
+• Copying and pasting the text content directly into a text file`;
+
+    throw new Error(message);
   }
 
   private static extractReadableLines(text: string): string[] {

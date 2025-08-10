@@ -9,9 +9,9 @@ import { DocumentProcessor } from "@/utils/DocumentProcessor";
 import { WebscrapeService } from "@/utils/WebscrapeService";
 import { AIService } from "@/utils/AIService";
 import { ApiKeyManager } from "./ApiKeyManager";
-import { useAuth } from "@/hooks/useAuth";
-import { useChatHistory } from "@/hooks/useChatHistory";
-import { ChatHistory } from "./ChatHistory";
+// import { useAuth } from "@/hooks/useAuth";
+// import { useChatHistory } from "@/hooks/useChatHistory";
+// import { ChatHistory } from "./ChatHistory";
 
 interface Message {
   id: string;
@@ -31,16 +31,16 @@ interface ProcessedContent {
 }
 
 export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
-  const { user } = useAuth();
-  const {
-    conversations,
-    currentConversation,
-    saveMessage,
-    selectConversation,
-    deleteConversation,
-    startNewConversation,
-    loading: historyLoading
-  } = useChatHistory();
+  // const { user } = useAuth();
+  // const {
+  //   conversations,
+  //   currentConversation,
+  //   saveMessage,
+  //   selectConversation,
+  //   deleteConversation,
+  //   startNewConversation,
+  //   loading: historyLoading
+  // } = useChatHistory();
   
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState("");
@@ -60,34 +60,29 @@ export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
 
   // Load messages from selected conversation
   useEffect(() => {
-    if (currentConversation?.messages) {
-      const formattedMessages: Message[] = currentConversation.messages.map(msg => ({
-        id: msg.id,
-        content: msg.content,
-        sender: msg.is_user ? 'user' : 'assistant',
-        timestamp: new Date(msg.created_at)
-      }));
-      setMessages(formattedMessages);
-    } else {
+    // if (currentConversation?.messages) {
+    //   const formattedMessages: Message[] = currentConversation.messages.map(msg => ({
+    //     id: msg.id,
+    //     content: msg.content,
+    //     sender: msg.is_user ? 'user' : 'assistant',
+    //     timestamp: new Date(msg.created_at)
+    //   }));
+    //   setMessages(formattedMessages);
+    // } else {
       // Process documents and website content when starting new conversation
       processContent();
-    }
-  }, [currentConversation, uploadedFiles, websiteUrl]);
+    // }
+  }, [uploadedFiles, websiteUrl]);
 
   const processContent = async () => {
-    console.log('processContent called with:', { uploadedFiles: uploadedFiles.length, websiteUrl });
     setIsProcessing(true);
     const processed: ProcessedContent = { documents: [] };
-    console.log('Starting content processing...');
 
     try {
       // Process uploaded documents
       for (const file of uploadedFiles) {
         try {
-          console.log(`Processing file: ${file.name}, type: ${file.type}, size: ${file.size}`);
           const content = await DocumentProcessor.extractTextFromFile(file);
-          console.log(`Extracted content length: ${content.length}, preview: ${content.substring(0, 200)}`);
-          
           if (content.length < 50) {
             throw new Error('Extracted content is too short - may not contain readable text');
           }
@@ -98,7 +93,6 @@ export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
             content,
             summary
           });
-          console.log(`Successfully processed ${file.name}`);
         } catch (error) {
           console.error(`Error processing ${file.name}:`, error);
           toast.error(`Failed to process ${file.name}: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -119,16 +113,14 @@ export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
             toast.error(`Failed to scrape website: ${result.error}`);
           }
         } catch (error) {
-          console.error('Error scraping website:', error);
           toast.error('Failed to scrape website content');
         }
       }
 
       setProcessedContent(processed);
-      console.log('Final processed content:', processed);
 
       // Generate welcome message based on processed content only for new conversations
-      if (!currentConversation) {
+      // if (!currentConversation) {
         const welcomeContent = generateWelcomeMessage(processed);
         const welcomeMessage: Message = {
           id: "welcome",
@@ -137,10 +129,9 @@ export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
           timestamp: new Date()
         };
         setMessages([welcomeMessage]);
-      }
+      // }
 
     } catch (error) {
-      console.error('Error processing content:', error);
       toast.error('Failed to process content');
     } finally {
       setIsProcessing(false);
@@ -237,14 +228,53 @@ export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
     return message;
   };
 
+  // Sanitize and compress context to remove garbled/encoded text
+  const cleanContextText = (text: string): string => {
+    if (!text) return '';
+
+    // Normalize to common printable charset + whitespace
+    const normalized = text
+      .replace(/[^\x20-\x7E\u00A0-\u00FF\n\r\t]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    // Split into segments by sentence-ish boundaries or line breaks
+    const segments = normalized.split(/(?<=[.!?])\s+|\n+/);
+    const kept: string[] = [];
+
+    for (const seg of segments) {
+      const s = seg.trim();
+      if (s.length < 20) continue;
+
+      const letters = (s.match(/[A-Za-z]/g) || []).length;
+      const total = s.length;
+      const ratio = total ? letters / total : 0;
+
+      // Keep segments that are predominantly readable text
+      if (ratio > 0.5) {
+        kept.push(s);
+      }
+    }
+
+    // Fallback: if nothing passes the filter, recover words of length >= 3
+    if (kept.length === 0) {
+      const words = normalized.match(/[A-Za-z0-9]{3,}/g) || [];
+      const recovered = words.join(' ');
+      return recovered.slice(0, 20000);
+    }
+
+    // Limit to a sane size
+    return kept.join('\n').slice(0, 20000);
+  };
+
   const handleSendMessage = async () => {
     if (!inputValue.trim()) return;
 
     // Check if user is authenticated
-    if (!user) {
-      toast.error("Please sign in to start chatting");
-      return;
-    }
+    // if (!user) {
+    //   toast.error("Please sign in to start chatting");
+    //   return;
+    // }
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -258,7 +288,7 @@ export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
     setIsLoading(true);
 
     // Save user message to database
-    await saveMessage(userMessage.content, true, currentConversation?.id);
+    // await saveMessage(userMessage.content, true, currentConversation?.id);
 
     try {
       // Combine all processed content for context
@@ -267,13 +297,17 @@ export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
       if (processedContent.documents.length > 0) {
         context += "Documents:\n";
         processedContent.documents.forEach(doc => {
-          context += `\n--- ${doc.name} ---\n${doc.content}\n`;
+          const cleaned = cleanContextText(doc.content);
+          context += `\n--- ${doc.name} ---\n${cleaned}\n`;
         });
       }
 
       if (processedContent.website) {
-        context += `\n\nWebsite (${processedContent.website.url}):\n${processedContent.website.content}`;
+        const rawSite = processedContent.website.content || '';
+        const cleanedSite = cleanContextText(rawSite);
+        context += `\n\nWebsite (${processedContent.website.url}):\n${cleanedSite}`;
       }
+
 
       if (!context.trim()) {
         throw new Error("No content available to answer questions about.");
@@ -295,20 +329,29 @@ export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
         setMessages(prev => [...prev, aiResponse]);
         
         // Save AI message to database
-        await saveMessage(aiResponse.content, false, currentConversation?.id);
+        // await saveMessage(aiResponse.content, false, currentConversation?.id);
       } else {
         throw new Error(result.error || 'Failed to get AI response');
       }
     } catch (error) {
-      console.error('Error getting AI response:', error);
+
+      // Friendlier, actionable error messaging for common cases
+      let friendlyMessage =
+        `Sorry, I encountered an error: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`;
+
+      if (error instanceof Error && /invalid openai api key|401/i.test(error.message)) {
+        friendlyMessage =
+          'It looks like your OpenAI API key is invalid. Please double-check your OpenAI API key configuration.';
+      }
+
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
-        content: `Sorry, I encountered an error: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`,
+        content: friendlyMessage,
         sender: 'assistant',
         timestamp: new Date()
       };
       setMessages(prev => [...prev, errorMessage]);
-      toast.error('Failed to get AI response');
+      toast.error(friendlyMessage);
     } finally {
       setIsLoading(false);
     }
@@ -364,7 +407,7 @@ export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
       )}
 
       {/* Chat History Integration */}
-      {user && (
+      {/* {user && (
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-2xl font-bold text-foreground font-heading">Chat with AskMate</h2>
           <Button
@@ -377,12 +420,12 @@ export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
             {showHistory ? 'Close' : 'History'}
           </Button>
         </div>
-      )}
+      )} */}
 
       {/* Layout with history sidebar */}
       <div className="flex gap-6">
         {/* Chat History Sidebar */}
-        {user && showHistory && (
+        {/* {user && showHistory && (
           <div className="w-80 flex-shrink-0 hidden lg:block">
             <ChatHistory
               conversations={conversations}
@@ -395,10 +438,10 @@ export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
               onClose={() => setShowHistory(false)}
             />
           </div>
-        )}
+        )} */}
 
         {/* Mobile Chat History */}
-        {user && showHistory && (
+        {/* {user && showHistory && (
           <ChatHistory
             conversations={conversations}
             currentConversation={currentConversation}
@@ -409,7 +452,7 @@ export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
             isOpen={showHistory}
             onClose={() => setShowHistory(false)}
           />
-        )}
+        )} */}
 
         {/* Main Chat Area */}
         <div className="flex-1">
@@ -427,11 +470,11 @@ export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
                   {websiteUrl && 'website content'}
                   {!uploadedFiles.length && !websiteUrl && 'documents or websites'}
                 </p>
-                {currentConversation && (
+                {/* {currentConversation && (
                   <p className="text-xs text-muted-foreground mt-1">
                     Current conversation: {currentConversation.title}
                   </p>
-                )}
+                )} */}
               </div>
               <div className="flex gap-2">
                 {websiteUrl && <ApiKeyManager />}
@@ -548,11 +591,11 @@ export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyPress={handleKeyPress}
                 className="flex-1"
-                disabled={isLoading || !user}
+                disabled={isLoading}
               />
               <Button
                 onClick={handleSendMessage}
-                disabled={!inputValue.trim() || isLoading || !user}
+                disabled={!inputValue.trim() || isLoading}
                 size="sm"
                 className="px-4"
               >
@@ -560,7 +603,7 @@ export const Chat = ({ uploadedFiles, websiteUrl }: ChatProps) => {
               </Button>
             </div>
             <p className="text-xs text-muted-foreground mt-2">
-              {user ? "Press Enter to send, Shift+Enter for new line" : "Please sign in to start chatting"}
+              Press Enter to send, Shift+Enter for new line
             </p>
           </Card>
         </div>

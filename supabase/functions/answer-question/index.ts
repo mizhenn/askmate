@@ -8,6 +8,39 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Sanitize noisy/garbled context into readable text
+function cleanContextText(text: string): string {
+  if (!text) return '';
+
+  // Normalize to printable characters + whitespace and collapse runs
+  const normalized = text
+    .replace(/[^\x20-\x7E\u00A0-\u00FF\n\r\t]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  // Split into sentence-like segments and keep mostly readable ones
+  const segments = normalized.split(/(?<=[.!?])\s+|\n+/);
+  const kept: string[] = [];
+
+  for (const seg of segments) {
+    const s = seg.trim();
+    if (s.length < 20) continue;
+
+    const letters = (s.match(/[A-Za-z]/g) || []).length;
+    const ratio = letters / s.length;
+
+    if (ratio > 0.5) kept.push(s);
+  }
+
+  // Fallback: recover words if nothing passed the filter
+  if (kept.length === 0) {
+    const words = normalized.match(/[A-Za-z0-9]{3,}/g) || [];
+    return words.join(' ').slice(0, 20000);
+  }
+
+  return kept.join('\n').slice(0, 20000);
+}
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -25,17 +58,19 @@ serve(async (req) => {
       throw new Error('Question and context are required');
     }
 
-    // Truncate context if it's too long to avoid token limits
+
+    // Clean and truncate context to avoid token limits
+    const baseContext = cleanContextText(context);
+
     const maxContextLength = 15000; // Conservative limit to stay under 30k tokens
-    let truncatedContext = context;
+    let truncatedContext = baseContext;
     
-    if (context.length > maxContextLength) {
-      console.log(`Context too long (${context.length} chars), truncating to ${maxContextLength}`);
+    if (baseContext.length > maxContextLength) {
       // Keep the beginning and end of the context for better analysis
-      const halfLength = maxContextLength / 2;
-      truncatedContext = context.substring(0, halfLength) + 
-        "\n\n[... content truncated for length ...]\n\n" + 
-        context.substring(context.length - halfLength);
+      const halfLength = Math.floor(maxContextLength / 2);
+      truncatedContext = baseContext.substring(0, halfLength) +
+        "\n\n[... content truncated for length ...]\n\n" +
+        baseContext.substring(baseContext.length - halfLength);
     }
 
     const systemPrompt = `You are an intelligent document analysis assistant. Your task is to provide accurate, detailed answers based ONLY on the content provided to you.
@@ -67,7 +102,7 @@ Please provide a thorough, accurate answer based on the content above. If you fi
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4.1-2025-04-14',  // Using mini model to reduce token usage and costs
+        model: 'gpt-4o-mini',  // FIXED: Using valid OpenAI model
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
