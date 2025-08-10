@@ -39,7 +39,6 @@ export class WebscrapeService {
   }
 
   private static async scrapeWebsiteSupabase(url: string) {
-    console.log('Scraping website via edge function:', url);
     
     const { data, error } = await supabase.functions.invoke('scrape-website', {
       body: { url }
@@ -62,8 +61,7 @@ export class WebscrapeService {
       };
     }
 
-    console.log('Successfully scraped website:', response.data?.title || url);
-    return { 
+    return {
       success: true,
       data: response.data
     };
@@ -73,8 +71,6 @@ export class WebscrapeService {
     if (!FIRECRAWL_API_KEY) {
       throw new Error('Firecrawl API key not found. Please add VITE_FIRECRAWL_API_KEY to your .env.local file.');
     }
-
-    console.log('Scraping website locally:', url);
 
     const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
       method: 'POST',
@@ -107,8 +103,7 @@ export class WebscrapeService {
       url: data.data?.metadata?.sourceURL || url
     };
 
-    console.log('Successfully scraped website:', scrapedData.title || url);
-    return { 
+    return {
       success: true,
       data: scrapedData
     };

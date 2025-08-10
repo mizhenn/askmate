@@ -2,18 +2,18 @@ import { Button } from "@/components/ui/button";
 import { FileQuestion, Menu, X, User, LogOut } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "@/hooks/useAuth";
+// import { useAuth } from "@/hooks/useAuth";
 import { ThemeToggle } from "./ThemeToggle";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+// import {
+//   DropdownMenu,
+//   DropdownMenuContent,
+//   DropdownMenuItem,
+//   DropdownMenuTrigger,
+// } from "@/components/ui/dropdown-menu";
 
 export const Navigation = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const { user, signOut } = useAuth();
+  // const { user, signOut } = useAuth();
   const navigate = useNavigate();
 
   return (
@@ -40,7 +40,7 @@ export const Navigation = () => {
               How it works
             </a>
             <ThemeToggle />
-            {user ? (
+            {/* {user ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" size="sm">
@@ -57,15 +57,15 @@ export const Navigation = () => {
               </DropdownMenu>
             ) : (
               <>
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   size="sm"
                   onClick={() => navigate("/auth")}
                 >
                   Sign in
-                </Button>
-                <Button 
-                  variant="default" 
+                </Button> */}
+                <Button
+                  variant="default"
                   size="sm"
                   onClick={() => {
                     const uploadSection = document.querySelector('#upload-section');
@@ -74,8 +74,8 @@ export const Navigation = () => {
                 >
                   Get started
                 </Button>
-              </>
-            )}
+              {/* </>
+            )} */}
           </div>
 
           {/* Mobile menu button */}
@@ -106,9 +106,9 @@ export const Navigation = () => {
                 How it works
               </a>
                <div className="flex flex-col gap-2 pt-2">
-                 {user ? (
-                   <Button 
-                     variant="outline" 
+                 {/* {user ? (
+                   <Button
+                     variant="outline"
                      size="sm"
                      onClick={() => {
                        signOut();
@@ -120,8 +120,8 @@ export const Navigation = () => {
                    </Button>
                  ) : (
                    <>
-                     <Button 
-                       variant="outline" 
+                     <Button
+                       variant="outline"
                        size="sm"
                        onClick={() => {
                          navigate("/auth");
@@ -129,9 +129,9 @@ export const Navigation = () => {
                        }}
                      >
                        Sign in
-                     </Button>
-                     <Button 
-                       variant="default" 
+                     </Button> */}
+                     <Button
+                       variant="default"
                        size="sm"
                        onClick={() => {
                          const uploadSection = document.querySelector('#upload-section');
@@ -141,8 +141,8 @@ export const Navigation = () => {
                      >
                        Get started
                      </Button>
-                   </>
-                 )}
+                   {/* </>
+                 )} */}
                </div>
             </div>
           </div>

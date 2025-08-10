@@ -65,9 +65,9 @@ VITE_FIRECRAWL_API_KEY=fc-your-actual-firecrawl-key-here
 # Set to 'local' for local development, 'production' for deployed version
 VITE_APP_MODE=local
 
-# Supabase configuration (pre-configured)
-VITE_SUPABASE_URL=https://ncpifmvfijbtecwwymou.supabase.co
-VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5jcGlmbXZmaWpidGVjd3d5bW91Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQwMDQxMTcsImV4cCI6MjA2OTU4MDExN30.FHaSkG3oXUXLoZNF_pXTv_fdFaiMzpM-kXsC0Ly605Q
+# Supabase configuration (replace with your actual values)
+VITE_SUPABASE_URL=https://your-project-id.supabase.co
+VITE_SUPABASE_ANON_KEY=your-supabase-anon-key-here
 ```
 
 ### 4. Start the Development Server
@@ -157,6 +157,8 @@ askmate/
 
 ## 🧪 Testing
 
+> **Note**: For detailed local setup and testing instructions, see [README-LOCAL-SETUP.md](README-LOCAL-SETUP.md)
+
 ### Test Local Setup
 ```bash
 # Test without API keys (should show errors)
@@ -213,15 +215,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Ensure you're connected to the internet
 - Check Supabase service status
 
-### Getting Help
-
-- 📖 [Documentation](https://docs.lovable.dev/)
-- 💬 [Discord Community](https://discord.com/channels/1119885301872070706/1280461670979993613)
-- 🐛 [Report Issues](https://github.com/yourusername/askmate/issues)
-
----
-
-<div align="center">
-  <p>Built with ❤️ using React, TypeScript, and Supabase</p>
-  <p>Powered by OpenAI and Firecrawl APIs</p>
-</div>

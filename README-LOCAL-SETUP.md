@@ -10,14 +10,16 @@
 
 1. **Clone the repository**
    ```bash
-   git clone <your-repo-url>
-   cd <your-project-name>
+   git clone https://github.com/yourusername/askmate.git
+   cd askmate
    ```
 
 2. **Install dependencies**
    ```bash
-   npm install
+   npm install --legacy-peer-deps
    ```
+   
+   **Note:** If you encounter dependency conflicts (ERESOLVE errors), use the `--legacy-peer-deps` flag as shown above. This resolves peer dependency conflicts between packages like `date-fns` and `react-day-picker`.
 
 3. **Set up environment variables**
    ```bash
@@ -38,6 +40,23 @@
    ```bash
    npm run dev
    ```
+
+## Troubleshooting
+
+### Common Issues
+
+**"vite: command not found" error:**
+- Make sure you've run `npm install --legacy-peer-deps` first
+- Ensure Node.js and npm are properly installed
+
+**"This site can't be reached" in browser:**
+- Verify the development server is running (look for "VITE ready" message)
+- Check the exact URL shown in terminal output (usually `http://localhost:5173/`)
+- Try `http://127.0.0.1:5173/` if localhost doesn't work
+
+**Dependency conflicts:**
+- Use `npm install --legacy-peer-deps` instead of `npm install`
+- Alternatively, try `npm install --force` if the above doesn't work
 
 ## How it works
 
